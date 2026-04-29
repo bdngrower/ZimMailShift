@@ -1,30 +1,43 @@
 import { Client } from "@microsoft/microsoft-graph-client";
 import { AuthCodeMSALBrowserAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/authCodeMsalBrowser";
 import { msalInstance, loginRequest } from "../lib/msal";
+import { InteractionType } from "@azure/msal-browser";
 
 export class GraphService {
-  private client: Client;
+  private client: Client | null = null;
 
-  constructor() {
+  private getClient() {
+    if (this.client) return this.client;
+
+    const account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+    
+    if (!account) {
+      throw new Error("No active account found. Please sign in.");
+    }
+
     const authProvider = new AuthCodeMSALBrowserAuthenticationProvider(msalInstance, {
+      account,
       scopes: loginRequest.scopes,
+      interactionType: InteractionType.Popup
     });
 
     this.client = Client.initWithMiddleware({
       authProvider,
     });
+
+    return this.client;
   }
 
   async getEmailsBeforeDate(userEmail: string, date: string) {
-    // Format date for OData filter: 2023-01-01T00:00:00Z
+    const client = this.getClient();
     const filterDate = new Date(date).toISOString();
     
     try {
-      const response = await this.client
+      const response = await client
         .api(`/users/${userEmail}/messages`)
         .filter(`receivedDateTime lt ${filterDate}`)
         .select("id,subject,receivedDateTime")
-        .top(10) // Small batch for control
+        .top(10)
         .get();
         
       return response.value;
@@ -35,24 +48,17 @@ export class GraphService {
   }
 
   async moveEmailToSharedMailbox(sourceUser: string, messageId: string, destinationUser: string) {
+    const client = this.getClient();
     try {
-      // In Graph API, moving usually happens within the same mailbox.
-      // To move to a DIFFERENT mailbox (shared), we might need to:
-      // 1. Create the message in the destination
-      // 2. Delete it from the source
-      // OR use a specific "Move" endpoint if supported for shared mailboxes.
-      
-      // For now, let's implement a Copy + Delete logic as it's more reliable for cross-mailbox.
-      
-      const message = await this.client
+      const message = await client
         .api(`/users/${sourceUser}/messages/${messageId}`)
         .get();
 
-      await this.client
+      await client
         .api(`/users/${destinationUser}/messages`)
         .post(message);
 
-      await this.client
+      await client
         .api(`/users/${sourceUser}/messages/${messageId}`)
         .delete();
         

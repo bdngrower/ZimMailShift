@@ -1,5 +1,5 @@
 import { MsalProvider } from "@azure/msal-react";
-import { IPublicClientApplication } from "@azure/msal-browser";
+import type { IPublicClientApplication } from "@azure/msal-browser";
 import { useState } from "react";
 import './App.css';
 import { Layout } from "./components/Layout";
