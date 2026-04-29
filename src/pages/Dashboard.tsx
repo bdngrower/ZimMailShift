@@ -65,7 +65,7 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   // Config
   const [source, setSource] = useState('');
   const [destination, setDestination] = useState('');
-  const [filterMode, setFilterMode] = useState<DateFilterMode>('before');
+  const [filterMode, setFilterMode] = useState<DateFilterMode>('all');
   const [filterDate, setFilterDate] = useState('');
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear() - 1));
   const [filterMonth, setFilterMonth] = useState('01');
@@ -96,19 +96,26 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
 
   const getDateFilter = () => {
     switch (filterMode) {
+      case 'all':    return { mode: 'all' as const };
       case 'before': return { mode: 'before' as const, value: filterDate };
-      case 'year': return { mode: 'year' as const, value: filterYear };
-      case 'month': return { mode: 'month' as const, value: `${filterMonthYear}-${filterMonth.padStart(2, '0')}` };
+      case 'year':   return { mode: 'year' as const, value: filterYear };
+      case 'month':  return { mode: 'month' as const, value: `${filterMonthYear}-${filterMonth.padStart(2, '0')}` };
     }
   };
 
   const getFilterLabel = () => {
     switch (filterMode) {
+      case 'all':    return 'todos os e-mails';
       case 'before': return `anteriores a ${filterDate}`;
-      case 'year': return `do ano ${filterYear}`;
-      case 'month': return `de ${MONTHS[parseInt(filterMonth) - 1]} ${filterMonthYear}`;
+      case 'year':   return `do ano ${filterYear}`;
+      case 'month':  return `de ${MONTHS[parseInt(filterMonth) - 1]} ${filterMonthYear}`;
     }
   };
+
+  const canPreview = !!source && (
+    filterMode === 'all' ? true :
+    filterMode === 'before' ? !!filterDate : true
+  );
 
   const handlePreview = async () => {
     if (!msalAccount || !source) return;
@@ -289,9 +296,10 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
           <div className="form-group">
             <label className="form-label"><Calendar size={14} style={{ marginRight: 4, verticalAlign: -2 }} /> Tipo de Filtro por Data</label>
             <div className="filter-mode-tabs">
+              <button className={`filter-tab${filterMode === 'all' ? ' active' : ''}`} onClick={() => setFilterMode('all')}>Todos</button>
               <button className={`filter-tab${filterMode === 'before' ? ' active' : ''}`} onClick={() => setFilterMode('before')}>Anteriores a</button>
-              <button className={`filter-tab${filterMode === 'year' ? ' active' : ''}`} onClick={() => setFilterMode('year')}>Todos do Ano</button>
-              <button className={`filter-tab${filterMode === 'month' ? ' active' : ''}`} onClick={() => setFilterMode('month')}>Todos do Mês</button>
+              <button className={`filter-tab${filterMode === 'year' ? ' active' : ''}`} onClick={() => setFilterMode('year')}>Por Ano</button>
+              <button className={`filter-tab${filterMode === 'month' ? ' active' : ''}`} onClick={() => setFilterMode('month')}>Por Mês</button>
             </div>
           </div>
 
