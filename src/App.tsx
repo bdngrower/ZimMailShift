@@ -7,7 +7,6 @@ import { Dashboard } from "./pages/Dashboard";
 import { AdminSettings } from "./pages/AdminSettings";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { useSettings } from "./hooks/useSettings";
-import { waitForMsalReady, getAccount } from "./lib/msal";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -19,19 +18,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const AppContent = () => {
   const { user } = useAuth();
   const { loading } = useSettings();
-  const [msalAccount, setMsalAccount] = useState<any>(null);
-  const [msalReady, setMsalReady] = useState(false);
 
-  // Wait for MSAL to finish processing the redirect (if any)
-  useEffect(() => {
-    waitForMsalReady().then(() => {
-      const account = getAccount();
-      if (account) setMsalAccount(account);
-      setMsalReady(true);
-    });
-  }, []);
-
-  if (loading || !msalReady) return null;
+  if (loading) return null;
 
   return (
     <Layout>
@@ -40,13 +28,13 @@ const AppContent = () => {
         
         <Route path="/dashboard" element={
           <ProtectedRoute>
-            <Dashboard msalAccount={msalAccount} setMsalAccount={setMsalAccount} />
+            <Dashboard />
           </ProtectedRoute>
         } />
         
         <Route path="/admin/settings" element={
           <ProtectedRoute>
-            <AdminSettings msalAccount={msalAccount} setMsalAccount={setMsalAccount} />
+            <AdminSettings />
           </ProtectedRoute>
         } />
         

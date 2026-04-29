@@ -5,43 +5,35 @@ import {
   ChevronDown, ChevronUp, ExternalLink, BookOpen, AlertCircle, User, ShieldCheck
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
-import { initializeMsal, login, getAccount } from '../lib/msal';
 
-interface Props {
-  msalAccount: any;
-  setMsalAccount: (account: any) => void;
-}
-
-export const AdminSettings: React.FC<Props> = ({ msalAccount, setMsalAccount }) => {
+export const AdminSettings: React.FC = () => {
   const { settings, saveSettings, loading } = useSettings();
   const [tenantId, setTenantId] = useState('');
   const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
   const [saved, setSaved] = useState(false);
   const [guideOpen, setGuideOpen] = useState(true);
   const [validating, setValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isValidated, setIsValidated] = useState(false);
 
   useEffect(() => {
     if (settings) {
       setTenantId(settings.tenantId || '');
       setClientId(settings.clientId || '');
-      if (settings.tenantId && settings.clientId) setGuideOpen(false);
+      setClientSecret(settings.clientSecret || '');
+      if (settings.tenantId && settings.clientId && settings.clientSecret) setGuideOpen(false);
     }
   }, [settings]);
 
-  // Check if we just came back from a redirect login
-  useEffect(() => {
-    const account = getAccount();
-    if (account && !msalAccount) setMsalAccount(account);
-  }, []);
+  // Removed useEffect for getAccount
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const newSettings = { tenantId, clientId, redirectUri: window.location.origin };
+    const newSettings = { tenantId, clientId, clientSecret, redirectUri: window.location.origin };
     saveSettings(newSettings);
-    try { initializeMsal(newSettings); } catch (err) { console.error(err); }
     setSaved(true);
-    setMsalAccount(null); // reset validation when settings change
+    setIsValidated(false); // reset validation when settings change
     setTimeout(() => setSaved(false), 4000);
   };
 
@@ -49,10 +41,24 @@ export const AdminSettings: React.FC<Props> = ({ msalAccount, setMsalAccount }) 
     setValidating(true);
     setValidationError(null);
     try {
-      await login(); // This triggers a full-page redirect to Microsoft — will come back here
+      const res = await fetch('/api/graph', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          clientId,
+          clientSecret,
+          action: 'search_users',
+          query: 'test'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro na API');
+      setIsValidated(true);
+      setMsalAccount({ name: 'Aplicação Conectada', username: 'Conexão via Application Permissions (Client Credentials)' });
     } catch (e: any) {
-      const errorMsg = e.message || e.errorCode || 'Erro desconhecido';
-      setValidationError(`Erro ao iniciar login: ${errorMsg}`);
+      setValidationError(`Erro ao validar conexão: ${e.message}`);
+    } finally {
       setValidating(false);
     }
   };
@@ -96,18 +102,26 @@ export const AdminSettings: React.FC<Props> = ({ msalAccount, setMsalAccount }) 
                     </ul>
                   </GuideStep>
 
-                  <GuideStep number="B" title="Copiar os IDs">
-                    <p>Após criar, na <strong>Visão Geral</strong> copie:</p>
+                  <GuideStep number="B" title="Criar um Segredo do Cliente (Client Secret)">
+                    <p>No menu lateral, vá em <strong>Certificados e segredos → Novo segredo do cliente</strong>.</p>
+                    <ul>
+                      <li>Dê uma descrição (ex: <code>ZimMailShift Secret</code>) e escolha uma validade.</li>
+                      <li>Copie o <strong>Valor</strong> do segredo imediatamente e cole abaixo (ele será ocultado depois).</li>
+                    </ul>
+                  </GuideStep>
+
+                  <GuideStep number="C" title="Copiar os IDs">
+                    <p>Na <strong>Visão Geral</strong> copie:</p>
                     <ul>
                       <li><strong>ID do Aplicativo (cliente)</strong> → Client ID abaixo</li>
                       <li><strong>ID do Diretório (locatário)</strong> → Tenant ID abaixo</li>
                     </ul>
                   </GuideStep>
 
-                  <GuideStep number="C" title="Configurar Permissões da API" highlight>
-                    <p>Vá em <strong>Permissões de API → Microsoft Graph → Permissões delegadas</strong> e adicione:</p>
+                  <GuideStep number="D" title="Configurar Permissões da API (Application)" highlight>
+                    <p>Vá em <strong>Permissões de API → Microsoft Graph → Permissões de Aplicativo (Application permissions)</strong> e adicione:</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', margin: '0.5rem 0' }}>
-                      {['User.Read','Mail.Read','Mail.ReadWrite','Mail.ReadWrite.Shared','Mail.Send','Directory.Read.All'].map(p => (
+                      {['User.Read.All','Mail.ReadWrite'].map(p => (
                         <code key={p} style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 6, padding: '0.2rem 0.5rem', fontSize: '0.78rem', color: '#a5b4fc' }}>{p}</code>
                       ))}
                     </div>
@@ -147,12 +161,14 @@ export const AdminSettings: React.FC<Props> = ({ msalAccount, setMsalAccount }) 
               <div>
                 <div className="settings-input-icon"><Globe size={14} /> Tenant ID (ID do Diretório)</div>
                 <input type="text" value={tenantId} onChange={e => setTenantId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
-                <div className="settings-hint">Registro de Aplicativo → Visão Geral → ID do Diretório (locatário).</div>
               </div>
               <div>
                 <div className="settings-input-icon"><Key size={14} /> Client ID (ID do Aplicativo)</div>
                 <input type="text" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
-                <div className="settings-hint">Registro de Aplicativo → Visão Geral → ID do Aplicativo (cliente).</div>
+              </div>
+              <div>
+                <div className="settings-input-icon"><Key size={14} /> Client Secret (Valor do Segredo)</div>
+                <input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="Insira o Valor do Segredo do Cliente" className="form-input" required />
               </div>
             </div>
           </div>
@@ -165,7 +181,7 @@ export const AdminSettings: React.FC<Props> = ({ msalAccount, setMsalAccount }) 
       {/* ── ETAPA 3: Validação ── */}
       <div className="settings-card" style={{ opacity: isConfigured ? 1 : 0.4, pointerEvents: isConfigured ? 'auto' : 'none' }}>
         <div className="settings-header">
-          <div className="settings-icon" style={{ background: msalAccount ? 'rgba(34,197,94,0.12)' : 'rgba(59,130,246,0.12)', color: msalAccount ? '#4ade80' : '#60a5fa' }}>
+          <div className="settings-icon" style={{ background: isValidated ? 'rgba(34,197,94,0.12)' : 'rgba(59,130,246,0.12)', color: isValidated ? '#4ade80' : '#60a5fa' }}>
             <ShieldCheck size={20} />
           </div>
           <div>
@@ -180,11 +196,10 @@ export const AdminSettings: React.FC<Props> = ({ msalAccount, setMsalAccount }) 
             </p>
           )}
 
-          {isConfigured && !msalAccount && (
+          {isConfigured && !isValidated && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <p style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: 1.6, margin: 0 }}>
-                Faça login com a conta <strong style={{ color: '#94a3b8' }}>Administrador Global do Microsoft 365</strong> para confirmar
-                que o App Registration e as permissões estão corretos. O login será feito na mesma aba.
+                Clique abaixo para testar a conexão com a Graph API via Application Permissions.
               </p>
               {validationError && (
                 <div className="login-error" style={{ margin: 0 }}>
@@ -192,21 +207,21 @@ export const AdminSettings: React.FC<Props> = ({ msalAccount, setMsalAccount }) 
                 </div>
               )}
               <button onClick={handleValidate} disabled={validating} className="btn-ms365" style={{ width: 'fit-content' }}>
-                {validating ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-                {validating ? 'Redirecionando...' : 'Entrar com conta Admin Global'}
+                {validating ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                {validating ? 'Testando...' : 'Testar Conexão'}
               </button>
             </div>
           )}
 
-          {msalAccount && (
+          {isValidated && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', marginBottom: '1rem' }}>
                 <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(34,197,94,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80', flexShrink: 0 }}>
                   <User size={20} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, color: 'white', fontSize: '0.9rem' }}>{msalAccount.name || msalAccount.username}</div>
-                  <div style={{ color: '#475569', fontSize: '0.78rem' }}>{msalAccount.username}</div>
+                  <div style={{ fontWeight: 600, color: 'white', fontSize: '0.9rem' }}>Conexão Estabelecida</div>
+                  <div style={{ color: '#475569', fontSize: '0.78rem' }}>Permissões de Aplicativo Ativas</div>
                 </div>
                 <div className="success-banner" style={{ margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>
                   <CheckCircle2 size={13} /> Validado

@@ -3,15 +3,10 @@ import { motion } from 'framer-motion';
 import { Send, Filter, Clock, CheckCircle2, AlertCircle, Loader2, Key, Search, Undo2, LogIn, Calendar, User } from 'lucide-react';
 import { graphService } from '../services/graphService';
 import type { DateFilterMode } from '../services/graphService';
-import { login } from '../lib/msal';
 import { useSettings } from '../hooks/useSettings';
 import { Link } from 'react-router-dom';
 
-interface Props {
-  msalAccount: any;
-  setMsalAccount: (account: any) => void;
-}
-
+// No longer requires msalAccount as a prop
 // Autocomplete hook for email search
 function useEmailSearch() {
   const [query, setQuery] = useState('');
@@ -50,7 +45,7 @@ const MONTHS = [
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
 ];
 
-export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
+export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
@@ -59,9 +54,6 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   const [logs, setLogs] = useState<{ time: string; message: string; type: 'info'|'success'|'error' }[]>([]);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [movedEmails, setMovedEmails] = useState<{ subject: string; newId: string }[]>([]);
-  const [connectError, setConnectError] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-
   // Config
   const [source, setSource] = useState('');
   const [destination, setDestination] = useState('');
@@ -78,17 +70,6 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   const [showDestDropdown, setShowDestDropdown] = useState(false);
 
   const { settings, loading: settingsLoading } = useSettings();
-
-  const handleConnectMsal = async () => {
-    setConnectError(null);
-    setConnecting(true);
-    try {
-      await login();
-    } catch (e: any) {
-      setConnectError(`Falha ao iniciar login: ${e.message || 'Erro desconhecido'}`);
-      setConnecting(false);
-    }
-  };
 
   const addLog = (message: string, type: 'info'|'success'|'error' = 'info') => {
     setLogs(p => [{ time: new Date().toLocaleTimeString(), message, type }, ...p]);
@@ -118,7 +99,7 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   );
 
   const handlePreview = async () => {
-    if (!msalAccount || !source) return;
+    if (!source) return;
     setPreviewing(true); setLogs([]); setPreviewCount(null);
     const df = getDateFilter();
     addLog(`Buscando e-mails em ${source} ${getFilterLabel()}...`);
@@ -136,7 +117,7 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   };
 
   const handleStart = async () => {
-    if (!msalAccount || !source || !destination) return;
+    if (!source || !destination) return;
     setLoading(true); setStatus('running'); setProgress(0); setLogs([]); setMovedEmails([]);
     const df = getDateFilter();
     addLog(`Iniciando migração de ${source} para ${destination}...`);
@@ -185,7 +166,7 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
 
   if (settingsLoading) return null;
 
-  if (!settings?.clientId || !settings?.tenantId) {
+  if (!settings?.clientId || !settings?.tenantId || !settings?.clientSecret) {
     return (
       <div className="empty-state">
         <div className="empty-icon"><Key size={28} /></div>
@@ -204,35 +185,8 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
       {/* LEFT */}
       <motion.div initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-        {/* MS Connection */}
-        {!msalAccount && (
-          <div className="ms-banner">
-            <div className="ms-banner-title"><LogIn size={16} /> Conexão Microsoft 365</div>
-            <p className="ms-banner-sub">Conecte sua conta do Microsoft 365 para autorizar as operações.</p>
-            {connectError && <div className="login-error" style={{ marginBottom: '0.75rem' }}><AlertCircle size={14} /> {connectError}</div>}
-            <button onClick={handleConnectMsal} disabled={connecting} className="btn-ms365">
-              {connecting ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
-              {connecting ? 'Redirecionando...' : 'Conectar ao Microsoft 365'}
-            </button>
-          </div>
-        )}
-
-        {msalAccount && (
-          <div className="card" style={{ borderColor: 'rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.04)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(34,197,94,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80', flexShrink: 0 }}>
-                <CheckCircle2 size={18} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, color: 'white', fontSize: '0.85rem' }}>{msalAccount.name || msalAccount.username}</div>
-                <div style={{ color: '#64748b', fontSize: '0.75rem' }}>Conectado ao Microsoft 365</div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Config */}
-        <div className="card" style={{ opacity: msalAccount ? 1 : 0.5, pointerEvents: msalAccount ? 'auto' : 'none' }}>
+        <div className="card">
           <div className="card-header"><Filter size={17} /> Configuração da Migração</div>
 
           {/* Source email with autocomplete */}
@@ -334,10 +288,10 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
           )}
 
           <div className="btn-row">
-            <button onClick={handlePreview} disabled={busy || !msalAccount || !canPreview} className="btn-secondary">
+            <button onClick={handlePreview} disabled={busy || !canPreview} className="btn-secondary">
               {previewing ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Pré-visualizar
             </button>
-            <button onClick={handleStart} disabled={busy || !msalAccount || !canExecute} className="btn-submit">
+            <button onClick={handleStart} disabled={busy || !canExecute} className="btn-submit">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Executar
             </button>
           </div>
