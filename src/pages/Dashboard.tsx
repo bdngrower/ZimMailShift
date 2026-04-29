@@ -59,6 +59,15 @@ export const Dashboard: React.FC = () => {
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<any>({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
 
+  // Config
+  const [source, setSource] = useState('');
+  const [destination, setDestination] = useState('');
+  const [filterMode, setFilterMode] = useState<DateFilterMode>('all');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterYear, setFilterYear] = useState(String(new Date().getFullYear() - 1));
+  const [filterMonth, setFilterMonth] = useState('01');
+  const [filterMonthYear, setFilterMonthYear] = useState(String(new Date().getFullYear()));
+
   // Auto-fetch folders when source is a valid email
   useEffect(() => {
     if (!source || !source.includes('@')) {
@@ -77,15 +86,6 @@ export const Dashboard: React.FC = () => {
     }, 800);
     return () => clearTimeout(timer);
   }, [source]);
-
-  // Config
-  const [source, setSource] = useState('');
-  const [destination, setDestination] = useState('');
-  const [filterMode, setFilterMode] = useState<DateFilterMode>('all');
-  const [filterDate, setFilterDate] = useState('');
-  const [filterYear, setFilterYear] = useState(String(new Date().getFullYear() - 1));
-  const [filterMonth, setFilterMonth] = useState('01');
-  const [filterMonthYear, setFilterMonthYear] = useState(String(new Date().getFullYear()));
 
   // Autocomplete
   const sourceSearch = useEmailSearch();
