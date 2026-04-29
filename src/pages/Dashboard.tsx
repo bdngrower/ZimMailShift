@@ -197,7 +197,6 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   }
 
   const busy = loading || previewing || rollingBack;
-  const canPreview = !!source && (filterMode === 'before' ? !!filterDate : true);
   const canExecute = canPreview && !!destination;
 
   return (
