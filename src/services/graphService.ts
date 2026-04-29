@@ -1,6 +1,6 @@
 import { Client } from "@microsoft/microsoft-graph-client";
 import { AuthCodeMSALBrowserAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/authCodeMsalBrowser";
-import { msalInstance, loginRequest } from "../lib/msal";
+import { getMsalInstance, loginRequest } from "../lib/msal";
 import { InteractionType } from "@azure/msal-browser";
 
 export class GraphService {
@@ -9,10 +9,15 @@ export class GraphService {
   private getClient() {
     if (this.client) return this.client;
 
+    const msalInstance = getMsalInstance();
+    if (!msalInstance) {
+        throw new Error("MSAL not initialized. Please configure settings first.");
+    }
+
     const account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
     
     if (!account) {
-      throw new Error("No active account found. Please sign in.");
+      throw new Error("No active account found. Please sign in to Microsoft.");
     }
 
     const authProvider = new AuthCodeMSALBrowserAuthenticationProvider(msalInstance, {

@@ -1,19 +1,31 @@
 import { PublicClientApplication, type Configuration } from "@azure/msal-browser";
+import { AppSettings } from "../hooks/useSettings";
 
-export const msalConfig: Configuration = {
+export const getMsalConfig = (settings: AppSettings): Configuration => ({
     auth: {
-        clientId: import.meta.env.VITE_MS_CLIENT_ID,
-        authority: `https://login.microsoftonline.com/${import.meta.env.VITE_MS_TENANT_ID || 'common'}`,
-        redirectUri: import.meta.env.VITE_MS_REDIRECT_URI,
+        clientId: settings.clientId,
+        authority: `https://login.microsoftonline.com/${settings.tenantId || 'common'}`,
+        redirectUri: settings.redirectUri || window.location.origin,
     },
     cache: {
         cacheLocation: "sessionStorage",
     }
-};
+});
 
-// Add scopes here for ID token to be used at Microsoft identity platform endpoints.
 export const loginRequest = {
     scopes: ["User.Read", "Mail.ReadWrite", "Mail.ReadWrite.Shared", "Mail.Send"]
 };
 
-export const msalInstance = new PublicClientApplication(msalConfig);
+// Singleton instance wrapper
+let msalInstance: PublicClientApplication | null = null;
+
+export const initializeMsal = (settings: AppSettings) => {
+    if (!msalInstance) {
+        msalInstance = new PublicClientApplication(getMsalConfig(settings));
+    }
+    return msalInstance;
+};
+
+export const getMsalInstance = () => {
+    return msalInstance;
+};
