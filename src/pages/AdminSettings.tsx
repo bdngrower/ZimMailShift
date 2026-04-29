@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Save, Settings, Key, Globe, CheckCircle2,
-  ChevronDown, ChevronUp, ExternalLink, BookOpen
+  Save, Settings, Key, Globe, CheckCircle2, LogIn, Loader2,
+  ChevronDown, ChevronUp, ExternalLink, BookOpen, AlertCircle, User, ShieldCheck
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
-import { initializeMsal } from '../lib/msal';
+import { initializeMsal, getMsalInstance } from '../lib/msal';
 
 export const AdminSettings: React.FC = () => {
   const { settings, saveSettings, loading } = useSettings();
@@ -14,11 +14,15 @@ export const AdminSettings: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const [guideOpen, setGuideOpen] = useState(true);
 
+  // Validation state
+  const [validating, setValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validatedUser, setValidatedUser] = useState<{ name: string; email: string } | null>(null);
+
   useEffect(() => {
     if (settings) {
       setTenantId(settings.tenantId || '');
       setClientId(settings.clientId || '');
-      // If already configured, collapse the guide
       if (settings.tenantId && settings.clientId) {
         setGuideOpen(false);
       }
@@ -32,10 +36,57 @@ export const AdminSettings: React.FC = () => {
     try {
       initializeMsal(newSettings);
     } catch (err) {
-      console.error('MSAL init error', err);
+      console.error('Erro ao inicializar MSAL', err);
     }
     setSaved(true);
+    setValidatedUser(null); // Reset validation on new save
     setTimeout(() => setSaved(false), 4000);
+  };
+
+  const handleValidate = async () => {
+    setValidating(true);
+    setValidationError(null);
+    setValidatedUser(null);
+
+    // Ensure MSAL is initialized with current settings
+    if (settings?.clientId && settings?.tenantId) {
+      try {
+        initializeMsal(settings);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const msal = getMsalInstance();
+    if (!msal) {
+      setValidationError('MSAL não inicializado. Salve as configurações primeiro.');
+      setValidating(false);
+      return;
+    }
+
+    try {
+      await msal.initialize();
+      const res = await msal.loginPopup({
+        scopes: ['User.Read', 'Directory.Read.All'],
+      });
+      if (res?.account) {
+        msal.setActiveAccount(res.account);
+        setValidatedUser({
+          name: res.account.name || res.account.username,
+          email: res.account.username,
+        });
+      }
+    } catch (e: any) {
+      if (e.errorCode !== 'user_cancelled') {
+        setValidationError(
+          'Falha na validação. Verifique se o App Registration está configurado corretamente no Azure ' +
+          'e se as permissões foram concedidas (Grant admin consent).'
+        );
+      }
+      console.error(e);
+    } finally {
+      setValidating(false);
+    }
   };
 
   if (loading) return <div style={{ color: '#475569', padding: '2rem' }}>Carregando...</div>;
@@ -132,39 +183,19 @@ export const AdminSettings: React.FC = () => {
           <div className="settings-body">
             {saved && (
               <div className="success-banner">
-                <CheckCircle2 size={16} /> Configurações salvas com sucesso! O sistema está pronto para uso.
-              </div>
-            )}
-
-            {isConfigured && !saved && (
-              <div className="success-banner" style={{ background: 'rgba(59,130,246,0.08)', borderColor: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>
-                <CheckCircle2 size={16} /> Configuração ativa. Para operar, acesse a aba <strong>Operações</strong> e conecte sua conta Microsoft 365.
+                <CheckCircle2 size={16} /> Configurações salvas com sucesso!
               </div>
             )}
 
             <div className="settings-fields">
               <div>
                 <div className="settings-input-icon"><Globe size={14} /> Tenant ID (ID do Diretório)</div>
-                <input
-                  type="text"
-                  value={tenantId}
-                  onChange={e => setTenantId(e.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  className="form-input"
-                  required
-                />
+                <input type="text" value={tenantId} onChange={e => setTenantId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
                 <div className="settings-hint">Encontrado em Registro de Aplicativo → Visão Geral → ID do Diretório (locatário).</div>
               </div>
               <div>
                 <div className="settings-input-icon"><Key size={14} /> Client ID (ID do Aplicativo)</div>
-                <input
-                  type="text"
-                  value={clientId}
-                  onChange={e => setClientId(e.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  className="form-input"
-                  required
-                />
+                <input type="text" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
                 <div className="settings-hint">Encontrado em Registro de Aplicativo → Visão Geral → ID do Aplicativo (cliente).</div>
               </div>
             </div>
@@ -175,6 +206,67 @@ export const AdminSettings: React.FC = () => {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* ── ETAPA 3: Validação com conta Global Admin ── */}
+      <div className="settings-card" style={{ opacity: isConfigured ? 1 : 0.4, pointerEvents: isConfigured ? 'auto' : 'none' }}>
+        <div className="settings-header">
+          <div className="settings-icon" style={{ background: validatedUser ? 'rgba(34,197,94,0.12)' : 'rgba(59,130,246,0.12)', color: validatedUser ? '#4ade80' : '#60a5fa' }}>
+            <ShieldCheck size={20} />
+          </div>
+          <div>
+            <div className="settings-title">Etapa 3 — Validar App Registration</div>
+            <div className="settings-subtitle">Conecte com a conta Administrador Global para validar o registro</div>
+          </div>
+        </div>
+        <div className="settings-body">
+          {!isConfigured && (
+            <p style={{ color: '#475569', fontSize: '0.85rem', margin: 0 }}>
+              Salve o Tenant ID e Client ID na Etapa 2 antes de validar.
+            </p>
+          )}
+
+          {isConfigured && !validatedUser && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <p style={{ color: '#64748b', fontSize: '0.85rem', lineHeight: 1.6, margin: 0 }}>
+                Faça login com a conta <strong style={{ color: '#94a3b8' }}>Administrador Global do Microsoft 365</strong> para validar
+                que o App Registration está configurado corretamente e que as permissões foram concedidas.
+              </p>
+
+              {validationError && (
+                <div className="login-error" style={{ margin: 0 }}>
+                  <AlertCircle size={14} /> {validationError}
+                </div>
+              )}
+
+              <button onClick={handleValidate} disabled={validating} className="btn-ms365" style={{ width: 'fit-content' }}>
+                {validating ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+                {validating ? 'Conectando...' : 'Conectar com conta Admin Global'}
+              </button>
+            </div>
+          )}
+
+          {validatedUser && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(34,197,94,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80', flexShrink: 0 }}>
+                <User size={20} />
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <div style={{ fontWeight: 600, color: 'white', fontSize: '0.9rem' }}>{validatedUser.name}</div>
+                <div style={{ color: '#475569', fontSize: '0.78rem' }}>{validatedUser.email}</div>
+              </div>
+              <div className="success-banner" style={{ margin: 0, padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>
+                <CheckCircle2 size={13} /> Validado
+              </div>
+            </div>
+          )}
+
+          {validatedUser && (
+            <div className="success-banner" style={{ marginTop: '1rem', background: 'rgba(59,130,246,0.08)', borderColor: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>
+              <CheckCircle2 size={16} /> App Registration validado com sucesso! Acesse a aba <strong>Operações</strong> para iniciar as migrações.
+            </div>
+          )}
+        </div>
       </div>
 
     </motion.div>

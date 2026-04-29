@@ -19,7 +19,6 @@ export const Dashboard: React.FC = () => {
 
   const { settings, loading: settingsLoading } = useSettings();
   const [msalAccount, setMsalAccount] = useState<any>(null);
-  const [msalReady, setMsalReady] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
 
   // Initialize MSAL when settings are available
@@ -27,7 +26,6 @@ export const Dashboard: React.FC = () => {
     if (settings?.clientId && settings?.tenantId) {
       try {
         initializeMsal(settings);
-        setMsalReady(true);
         const msal = getMsalInstance();
         if (msal) {
           const account = msal.getActiveAccount() || msal.getAllAccounts()[0];
