@@ -5,7 +5,7 @@ import {
   ChevronDown, ChevronUp, ExternalLink, BookOpen, AlertCircle, User, ShieldCheck
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
-import { initializeMsal, getMsalInstance } from '../lib/msal';
+import { initializeMsal, getMsalInstance, safeLoginPopup } from '../lib/msal';
 
 export const AdminSettings: React.FC = () => {
   const { settings, saveSettings, loading } = useSettings();
@@ -65,10 +65,7 @@ export const AdminSettings: React.FC = () => {
     }
 
     try {
-      await msal.initialize();
-      const res = await msal.loginPopup({
-        scopes: ['User.Read', 'Directory.Read.All'],
-      });
+      const res = await safeLoginPopup(msal, ['User.Read', 'Directory.Read.All']);
       if (res?.account) {
         msal.setActiveAccount(res.account);
         setValidatedUser({

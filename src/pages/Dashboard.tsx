@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Send, Filter, Clock, CheckCircle2, AlertCircle, Loader2, Key, Search, Undo2, LogIn } from 'lucide-react';
 import { graphService } from '../services/graphService';
-import { getMsalInstance, loginRequest, initializeMsal } from '../lib/msal';
+import { getMsalInstance, loginRequest, initializeMsal, safeLoginPopup } from '../lib/msal';
 import { useSettings } from '../hooks/useSettings';
 import { Link } from 'react-router-dom';
 
@@ -42,8 +42,7 @@ export const Dashboard: React.FC = () => {
     if (!msal) return;
     setConnectError(null);
     try {
-      await msal.initialize();
-      const res = await msal.loginPopup(loginRequest);
+      const res = await safeLoginPopup(msal, loginRequest.scopes);
       if (res?.account) {
         msal.setActiveAccount(res.account);
         setMsalAccount(res.account);
