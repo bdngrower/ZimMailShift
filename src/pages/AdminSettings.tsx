@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Save, Settings, Key, Globe, CheckCircle2, LogIn, Loader2,
+  Save, Settings, Key, Globe, CheckCircle2, Loader2,
   ChevronDown, ChevronUp, ExternalLink, BookOpen, AlertCircle, User, ShieldCheck
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
@@ -55,7 +55,6 @@ export const AdminSettings: React.FC = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro na API');
       setIsValidated(true);
-      setMsalAccount({ name: 'Aplicação Conectada', username: 'Conexão via Application Permissions (Client Credentials)' });
     } catch (e: any) {
       setValidationError(`Erro ao validar conexão: ${e.message}`);
     } finally {

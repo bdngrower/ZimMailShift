@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Filter, Clock, CheckCircle2, AlertCircle, Loader2, Key, Search, Undo2, LogIn, Calendar, User } from 'lucide-react';
+import { Send, Filter, Clock, CheckCircle2, AlertCircle, Loader2, Key, Search, Undo2, Calendar, User } from 'lucide-react';
 import { graphService } from '../services/graphService';
 import type { DateFilterMode } from '../services/graphService';
 import { useSettings } from '../hooks/useSettings';

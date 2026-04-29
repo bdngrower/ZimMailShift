@@ -1,5 +1,9 @@
-import { DateFilter } from '../pages/Dashboard';
-import { useSettings } from '../hooks/useSettings';
+export type DateFilterMode = 'all' | 'before' | 'year' | 'month';
+
+export interface DateFilter {
+  mode: DateFilterMode;
+  value?: string;
+}
 
 export class GraphService {
   private getSettings() {
