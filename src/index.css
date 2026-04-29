@@ -679,3 +679,79 @@ input { font-family: inherit; }
   gap: 0.25rem;
 }
 .guide-link:hover { text-decoration: underline; }
+
+/* ========== AUTOCOMPLETE DROPDOWN ========== */
+.autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0; right: 0;
+  background: #111827;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  margin-top: 4px;
+  z-index: 50;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+}
+.autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.875rem;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  text-align: left;
+  transition: background 0.15s;
+}
+.autocomplete-item:hover {
+  background: rgba(59,130,246,0.1);
+}
+.autocomplete-item + .autocomplete-item {
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+/* ========== FILTER MODE TABS ========== */
+.filter-mode-tabs {
+  display: flex;
+  gap: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.filter-tab {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  background: rgba(255,255,255,0.02);
+  border: none;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.filter-tab + .filter-tab {
+  border-left: 1px solid rgba(255,255,255,0.06);
+}
+.filter-tab:hover { color: #94a3b8; background: rgba(255,255,255,0.04); }
+.filter-tab.active {
+  background: rgba(59,130,246,0.15);
+  color: #60a5fa;
+}
+
+/* ========== SELECT INPUT ========== */
+select.form-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 2rem;
+  cursor: pointer;
+}
+select.form-input option {
+  background: #0f172a;
+  color: #e2e8f0;
+}

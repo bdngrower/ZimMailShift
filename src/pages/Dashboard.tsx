@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Filter, Clock, CheckCircle2, AlertCircle, Loader2, Key, Search, Undo2, LogIn } from 'lucide-react';
+import { Send, Filter, Clock, CheckCircle2, AlertCircle, Loader2, Key, Search, Undo2, LogIn, Calendar, User } from 'lucide-react';
 import { graphService } from '../services/graphService';
+import type { DateFilterMode } from '../services/graphService';
 import { login } from '../lib/msal';
 import { useSettings } from '../hooks/useSettings';
 import { Link } from 'react-router-dom';
@@ -11,6 +12,44 @@ interface Props {
   setMsalAccount: (account: any) => void;
 }
 
+// Autocomplete hook for email search
+function useEmailSearch() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<{ displayName: string; mail: string; userPrincipalName: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (query.length < 2) { setResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const r = await graphService.searchUsers(query);
+        setResults(r);
+      } catch { setResults([]); }
+      setSearching(false);
+    }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query]);
+
+  return { query, setQuery, results, searching, setResults };
+}
+
+// Generate year options (current year back to 2015)
+function getYearOptions() {
+  const currentYear = new Date().getFullYear();
+  const years: string[] = [];
+  for (let y = currentYear; y >= 2015; y--) years.push(String(y));
+  return years;
+}
+
+// Generate month options
+const MONTHS = [
+  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+];
+
 export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   const [loading, setLoading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -18,11 +57,25 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<'idle'|'running'|'completed'|'error'|'rolling_back'|'previewed'>('idle');
   const [logs, setLogs] = useState<{ time: string; message: string; type: 'info'|'success'|'error' }[]>([]);
-  const [config, setConfig] = useState({ source: '', destination: '', date: '' });
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [movedEmails, setMovedEmails] = useState<{ subject: string; newId: string }[]>([]);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+
+  // Config
+  const [source, setSource] = useState('');
+  const [destination, setDestination] = useState('');
+  const [filterMode, setFilterMode] = useState<DateFilterMode>('before');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterYear, setFilterYear] = useState(String(new Date().getFullYear() - 1));
+  const [filterMonth, setFilterMonth] = useState('01');
+  const [filterMonthYear, setFilterMonthYear] = useState(String(new Date().getFullYear()));
+
+  // Autocomplete
+  const sourceSearch = useEmailSearch();
+  const destSearch = useEmailSearch();
+  const [showSourceDropdown, setShowSourceDropdown] = useState(false);
+  const [showDestDropdown, setShowDestDropdown] = useState(false);
 
   const { settings, loading: settingsLoading } = useSettings();
 
@@ -30,10 +83,9 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
     setConnectError(null);
     setConnecting(true);
     try {
-      await login(); // Full-page redirect to Microsoft — no popup
+      await login();
     } catch (e: any) {
-      const errorMsg = e.message || e.errorCode || 'Erro desconhecido';
-      setConnectError(`Falha ao iniciar login: ${errorMsg}`);
+      setConnectError(`Falha ao iniciar login: ${e.message || 'Erro desconhecido'}`);
       setConnecting(false);
     }
   };
@@ -42,61 +94,82 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
     setLogs(p => [{ time: new Date().toLocaleTimeString(), message, type }, ...p]);
   };
 
+  const getDateFilter = () => {
+    switch (filterMode) {
+      case 'before': return { mode: 'before' as const, value: filterDate };
+      case 'year': return { mode: 'year' as const, value: filterYear };
+      case 'month': return { mode: 'month' as const, value: `${filterMonthYear}-${filterMonth.padStart(2, '0')}` };
+    }
+  };
+
+  const getFilterLabel = () => {
+    switch (filterMode) {
+      case 'before': return `anteriores a ${filterDate}`;
+      case 'year': return `do ano ${filterYear}`;
+      case 'month': return `de ${MONTHS[parseInt(filterMonth) - 1]} ${filterMonthYear}`;
+    }
+  };
+
   const handlePreview = async () => {
-    if (!msalAccount || !config.source || !config.date) return;
-    setPreviewing(true); setLogs([]);
-    addLog(`Buscando e-mails em ${config.source} anteriores a ${config.date}...`);
+    if (!msalAccount || !source) return;
+    setPreviewing(true); setLogs([]); setPreviewCount(null);
+    const df = getDateFilter();
+    addLog(`Buscando e-mails em ${source} ${getFilterLabel()}...`);
     try {
-      const emails = await graphService.getEmailsBeforeDate(config.source, config.date);
+      const emails = await graphService.getEmailsByFilter(source, df);
       const count = emails?.length ?? 0;
       setPreviewCount(count); setStatus('previewed');
       count === 0
         ? addLog('Nenhum e-mail encontrado com esses critérios.', 'info')
         : addLog(`Encontrados ${count} e-mails prontos para movimentação.`, 'success');
     } catch (e: any) {
-      addLog(e.message || 'Falha ao buscar pré-visualização.', 'error');
+      addLog(`Erro: ${e.message || 'Falha ao buscar e-mails.'}`, 'error');
+      setStatus('error');
     } finally { setPreviewing(false); }
   };
 
   const handleStart = async () => {
-    if (!msalAccount || !config.source || !config.destination || !config.date) return;
+    if (!msalAccount || !source || !destination) return;
     setLoading(true); setStatus('running'); setProgress(0); setLogs([]); setMovedEmails([]);
-    addLog(`Iniciando migração de ${config.source} para ${config.destination}...`);
+    const df = getDateFilter();
+    addLog(`Iniciando migração de ${source} para ${destination}...`);
     try {
-      const emails = await graphService.getEmailsBeforeDate(config.source, config.date);
-      if (!emails?.length) { addLog('Nenhum e-mail encontrado.', 'info'); setStatus('completed'); return; }
-      addLog(`Encontrados ${emails.length} e-mails. Iniciando movimentação...`, 'success');
+      const emails = await graphService.getEmailsByFilter(source, df);
+      if (!emails?.length) { addLog('Nenhum e-mail encontrado.', 'info'); setStatus('completed'); setLoading(false); return; }
+      addLog(`Encontrados ${emails.length} e-mails. Movimentação em andamento...`, 'success');
       let count = 0;
       const moved: { subject: string; newId: string }[] = [];
       for (const email of emails) {
         try {
           addLog(`Movendo: "${email.subject}"...`);
-          await new Promise(r => setTimeout(r, 800));
-          moved.push({ subject: email.subject, newId: `sim-${Date.now()}` });
+          const newId = await graphService.moveEmailToSharedMailbox(source, email.id, destination);
+          moved.push({ subject: email.subject, newId });
           count++;
           setProgress(Math.round((count / emails.length) * 100));
           addLog(`Movido: ${email.subject}`, 'success');
-        } catch { addLog(`Falha ao mover: ${email.subject}`, 'error'); }
+        } catch (err: any) {
+          addLog(`Falha: ${email.subject} — ${err.message || ''}`, 'error');
+        }
       }
       setMovedEmails(moved); setStatus('completed');
       addLog(`Concluído! ${count} de ${emails.length} e-mails movidos.`, 'success');
     } catch (e: any) {
-      setStatus('error'); addLog(e.message || 'Erro durante a migração.', 'error');
+      setStatus('error'); addLog(`Erro: ${e.message || 'Falha na migração.'}`, 'error');
     } finally { setLoading(false); }
   };
 
   const handleRollback = async () => {
     if (!movedEmails.length) return;
     setRollingBack(true); setStatus('rolling_back'); setProgress(0);
-    addLog(`Iniciando reversão de ${movedEmails.length} e-mails...`);
+    addLog(`Revertendo ${movedEmails.length} e-mails...`);
     let count = 0;
     for (const email of movedEmails) {
       try {
         addLog(`Restaurando: "${email.subject}"...`);
-        await new Promise(r => setTimeout(r, 800));
+        await graphService.rollbackMove(source, destination, email.newId);
         count++; setProgress(Math.round((count / movedEmails.length) * 100));
         addLog(`Restaurado: ${email.subject}`, 'success');
-      } catch { addLog(`Falha ao restaurar: ${email.subject}`, 'error'); }
+      } catch (err: any) { addLog(`Falha: ${email.subject} — ${err.message || ''}`, 'error'); }
     }
     setMovedEmails([]); setStatus('idle');
     addLog(`Reversão concluída. ${count} e-mails restaurados.`, 'success');
@@ -117,22 +190,20 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
   }
 
   const busy = loading || previewing || rollingBack;
+  const canPreview = !!source && (filterMode === 'before' ? !!filterDate : true);
+  const canExecute = canPreview && !!destination;
 
   return (
     <div className="dashboard-grid">
       {/* LEFT */}
       <motion.div initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-        {/* Microsoft Connection */}
+        {/* MS Connection */}
         {!msalAccount && (
           <div className="ms-banner">
             <div className="ms-banner-title"><LogIn size={16} /> Conexão Microsoft 365</div>
-            <p className="ms-banner-sub">Conecte sua conta administradora do Microsoft 365 para autorizar as operações. Você será redirecionado para a página de login da Microsoft.</p>
-            {connectError && (
-              <div className="login-error" style={{ marginBottom: '0.75rem' }}>
-                <AlertCircle size={14} /> {connectError}
-              </div>
-            )}
+            <p className="ms-banner-sub">Conecte sua conta do Microsoft 365 para autorizar as operações.</p>
+            {connectError && <div className="login-error" style={{ marginBottom: '0.75rem' }}><AlertCircle size={14} /> {connectError}</div>}
             <button onClick={handleConnectMsal} disabled={connecting} className="btn-ms365">
               {connecting ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
               {connecting ? 'Redirecionando...' : 'Conectar ao Microsoft 365'}
@@ -157,34 +228,122 @@ export const Dashboard: React.FC<Props> = ({ msalAccount }) => {
         {/* Config */}
         <div className="card" style={{ opacity: msalAccount ? 1 : 0.5, pointerEvents: msalAccount ? 'auto' : 'none' }}>
           <div className="card-header"><Filter size={17} /> Configuração da Migração</div>
-          <div className="form-group">
-            <label className="form-label">Caixa de Origem (Microsoft 365)</label>
-            <input type="email" value={config.source} onChange={e => setConfig(c => ({...c, source: e.target.value}))} placeholder="usuario@empresa.com.br" className="form-input" />
+
+          {/* Source email with autocomplete */}
+          <div className="form-group" style={{ position: 'relative' }}>
+            <label className="form-label">Caixa de Origem</label>
+            <input
+              type="text"
+              value={source}
+              onChange={e => { setSource(e.target.value); sourceSearch.setQuery(e.target.value); setShowSourceDropdown(true); }}
+              onFocus={() => setShowSourceDropdown(true)}
+              onBlur={() => setTimeout(() => setShowSourceDropdown(false), 200)}
+              placeholder="Comece a digitar o nome ou e-mail..."
+              className="form-input"
+            />
+            {showSourceDropdown && sourceSearch.results.length > 0 && (
+              <div className="autocomplete-dropdown">
+                {sourceSearch.results.map((u, i) => (
+                  <button key={i} className="autocomplete-item" onMouseDown={() => { setSource(u.mail || u.userPrincipalName); setShowSourceDropdown(false); sourceSearch.setResults([]); }}>
+                    <User size={14} />
+                    <div>
+                      <div style={{ fontWeight: 500, color: 'white', fontSize: '0.82rem' }}>{u.displayName}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#475569' }}>{u.mail || u.userPrincipalName}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {sourceSearch.searching && <div style={{ position: 'absolute', right: 12, top: 38, color: '#475569' }}><Loader2 size={14} className="animate-spin" /></div>}
           </div>
-          <div className="form-group">
+
+          {/* Destination email with autocomplete */}
+          <div className="form-group" style={{ position: 'relative' }}>
             <label className="form-label">Caixa Compartilhada de Destino</label>
-            <input type="email" value={config.destination} onChange={e => setConfig(c => ({...c, destination: e.target.value}))} placeholder="arquivo@empresa.com.br" className="form-input" />
+            <input
+              type="text"
+              value={destination}
+              onChange={e => { setDestination(e.target.value); destSearch.setQuery(e.target.value); setShowDestDropdown(true); }}
+              onFocus={() => setShowDestDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDestDropdown(false), 200)}
+              placeholder="Comece a digitar o nome ou e-mail..."
+              className="form-input"
+            />
+            {showDestDropdown && destSearch.results.length > 0 && (
+              <div className="autocomplete-dropdown">
+                {destSearch.results.map((u, i) => (
+                  <button key={i} className="autocomplete-item" onMouseDown={() => { setDestination(u.mail || u.userPrincipalName); setShowDestDropdown(false); destSearch.setResults([]); }}>
+                    <User size={14} />
+                    <div>
+                      <div style={{ fontWeight: 500, color: 'white', fontSize: '0.82rem' }}>{u.displayName}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#475569' }}>{u.mail || u.userPrincipalName}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {destSearch.searching && <div style={{ position: 'absolute', right: 12, top: 38, color: '#475569' }}><Loader2 size={14} className="animate-spin" /></div>}
           </div>
+
+          {/* Date Filter Mode */}
           <div className="form-group">
-            <label className="form-label">Mover E-mails Anteriores a</label>
-            <input type="date" value={config.date} onChange={e => setConfig(c => ({...c, date: e.target.value}))} className="form-input" />
+            <label className="form-label"><Calendar size={14} style={{ marginRight: 4, verticalAlign: -2 }} /> Tipo de Filtro por Data</label>
+            <div className="filter-mode-tabs">
+              <button className={`filter-tab${filterMode === 'before' ? ' active' : ''}`} onClick={() => setFilterMode('before')}>Anteriores a</button>
+              <button className={`filter-tab${filterMode === 'year' ? ' active' : ''}`} onClick={() => setFilterMode('year')}>Todos do Ano</button>
+              <button className={`filter-tab${filterMode === 'month' ? ' active' : ''}`} onClick={() => setFilterMode('month')}>Todos do Mês</button>
+            </div>
           </div>
+
+          {/* Filter value inputs */}
+          {filterMode === 'before' && (
+            <div className="form-group">
+              <label className="form-label">Mover e-mails recebidos antes de</label>
+              <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="form-input" />
+            </div>
+          )}
+
+          {filterMode === 'year' && (
+            <div className="form-group">
+              <label className="form-label">Todos os e-mails do ano</label>
+              <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="form-input">
+                {getYearOptions().map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          )}
+
+          {filterMode === 'month' && (
+            <div className="form-group">
+              <label className="form-label">Todos os e-mails do mês</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="form-input" style={{ flex: 2 }}>
+                  {MONTHS.map((m, i) => <option key={i} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
+                </select>
+                <select value={filterMonthYear} onChange={e => setFilterMonthYear(e.target.value)} className="form-input" style={{ flex: 1 }}>
+                  {getYearOptions().map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
           <div className="btn-row">
-            <button onClick={handlePreview} disabled={busy || !msalAccount} className="btn-secondary">
+            <button onClick={handlePreview} disabled={busy || !msalAccount || !canPreview} className="btn-secondary">
               {previewing ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Pré-visualizar
             </button>
-            <button onClick={handleStart} disabled={busy || !msalAccount} className="btn-submit">
+            <button onClick={handleStart} disabled={busy || !msalAccount || !canExecute} className="btn-submit">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Executar
             </button>
           </div>
+
           {status === 'completed' && movedEmails.length > 0 && (
             <button onClick={handleRollback} disabled={busy} className="btn-danger">
               {rollingBack ? <Loader2 size={16} className="animate-spin" /> : <Undo2 size={16} />} Desfazer Movimentação (Rollback)
             </button>
           )}
+
           {previewCount !== null && status === 'previewed' && (
             <div className="preview-callout">
-              <strong>Resultado:</strong> {previewCount} e-mail{previewCount !== 1 ? 's' : ''} encontrado{previewCount !== 1 ? 's' : ''}.{' '}
+              <strong>Resultado:</strong> {previewCount} e-mail{previewCount !== 1 ? 's' : ''} encontrado{previewCount !== 1 ? 's' : ''} {getFilterLabel()}.{' '}
               {previewCount > 0 ? 'Pronto para executar.' : 'Nenhum e-mail será movido.'}
             </div>
           )}
