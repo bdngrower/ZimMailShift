@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { LogIn, Mail, Lock, Loader2 } from 'lucide-react';
+import { LogIn, Mail, Lock, Loader2, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 
@@ -16,13 +16,10 @@ export const Login: React.FC = () => {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setError(error.message);
+      setError('Invalid credentials. Please check your email and password.');
       setLoading(false);
     } else {
       navigate('/dashboard');
@@ -30,54 +27,69 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="auth-container">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+    <div className="login-page">
+      {/* Background decoration */}
+      <div className="login-bg-glow-1" />
+      <div className="login-bg-glow-2" />
+
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        className="auth-card"
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="login-card"
       >
-        <div className="flex justify-center mb-6">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-             <Mail size={24} className="text-white" />
+        {/* Brand */}
+        <div className="login-brand">
+          <div className="login-brand-icon">
+            <Mail size={22} />
           </div>
+          <span className="login-brand-name">ZimMailShift</span>
         </div>
-        <h2 className="auth-title">System Login</h2>
-        <p className="auth-subtitle">
-          Sign in to ZimMailShift administration
-        </p>
+
+        <div className="login-header">
+          <h1 className="login-title">Welcome back</h1>
+          <p className="login-subtitle">Sign in to your administration account</p>
+        </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-lg mb-6 text-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="login-error"
+          >
+            <Shield size={14} />
             {error}
-          </div>
+          </motion.div>
         )}
-        
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="text-left">
-            <label className="block text-sm font-medium text-slate-400 mb-1">Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} />
-              <input 
-                type="email" 
+
+        <form onSubmit={handleLogin} className="login-form">
+          <div className="login-field">
+            <label className="login-label">Email address</label>
+            <div className="login-input-wrapper">
+              <Mail className="login-input-icon" size={16} />
+              <input
+                type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                placeholder="admin@example.com"
+                className="login-input"
+                placeholder="admin@company.com"
+                autoComplete="email"
                 required
               />
             </div>
           </div>
-          
-          <div className="text-left">
-            <label className="block text-sm font-medium text-slate-400 mb-1">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} />
-              <input 
-                type="password" 
+
+          <div className="login-field">
+            <label className="login-label">Password</label>
+            <div className="login-input-wrapper">
+              <Lock className="login-input-icon" size={16} />
+              <input
+                type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                placeholder="••••••••"
+                className="login-input"
+                placeholder="••••••••••"
+                autoComplete="current-password"
                 required
               />
             </div>
@@ -86,12 +98,21 @@ export const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 mt-6"
+            className="login-submit"
           >
-            {loading ? <Loader2 className="animate-spin" size={18} /> : <LogIn size={18} />}
-            Sign In
+            {loading ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <LogIn size={18} />
+            )}
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
+
+        <div className="login-footer">
+          <Shield size={12} />
+          <span>Secured by Supabase Auth · Enterprise Grade</span>
+        </div>
       </motion.div>
     </div>
   );
