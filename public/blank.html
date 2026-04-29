@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Autenticando...</title>
+  </head>
+  <body>
+    <!--
+      Esta página é usada como redirect URI para fluxos de popup do MSAL.
+      O MSAL processa o token e fecha o popup automaticamente.
+      Não adicione conteúdo aqui.
+    -->
+    <script type="module">
+      // Ao retornar do popup da Microsoft, o MSAL no contexto pai
+      // irá capturar o resultado. Esta página pode simplesmente fechar.
+      if (window.opener) {
+        // handled by MSAL on the parent window
+      }
+    </script>
+  </body>
+</html>

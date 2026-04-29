@@ -1,14 +1,23 @@
-import { PublicClientApplication, type Configuration, InteractionRequiredAuthError } from "@azure/msal-browser";
+import { PublicClientApplication, type Configuration } from "@azure/msal-browser";
 import type { AppSettings } from "../hooks/useSettings";
+
+// Dedicated redirect page for popup flows - must be a static HTML page,
+// not the SPA root, so React Router doesn't intercept it.
+const POPUP_REDIRECT_URI = `${window.location.origin}/blank.html`;
 
 export const getMsalConfig = (settings: AppSettings): Configuration => ({
     auth: {
         clientId: settings.clientId,
         authority: `https://login.microsoftonline.com/${settings.tenantId || 'common'}`,
-        redirectUri: settings.redirectUri || window.location.origin,
+        redirectUri: POPUP_REDIRECT_URI,
+        postLogoutRedirectUri: window.location.origin,
+        navigateToLoginRequestUrl: false,
     },
     cache: {
         cacheLocation: "sessionStorage",
+    },
+    system: {
+        allowNativeBroker: false,
     }
 });
 
@@ -42,8 +51,7 @@ export const getMsalInstance = () => msalInstance;
 
 /**
  * Clears the sessionStorage keys MSAL uses to track interaction state.
- * Necessary when the popup was closed mid-flow or the instance was recreated,
- * otherwise MSAL throws "interaction_in_progress".
+ * Prevents the "interaction_in_progress" error after a popup is closed mid-flow.
  */
 export const clearMsalInteractionState = () => {
     const keysToRemove: string[] = [];
@@ -62,19 +70,20 @@ export const clearMsalInteractionState = () => {
 };
 
 /**
- * Safe popup login — clears interaction state, initializes MSAL, then logs in.
+ * Safe popup login — clears interaction state, initializes MSAL once, then logs in.
+ * The popup redirects to /blank.html so React Router never intercepts it.
  */
 export const safeLoginPopup = async (
     instance: PublicClientApplication,
     scopes: string[]
-): Promise<ReturnType<typeof instance.loginPopup>> => {
+): Promise<Awaited<ReturnType<typeof instance.loginPopup>>> => {
     clearMsalInteractionState();
     if (!msalInitialized) {
         await instance.initialize();
         msalInitialized = true;
     }
-    return instance.loginPopup({ scopes });
+    return instance.loginPopup({
+        scopes,
+        redirectUri: POPUP_REDIRECT_URI,
+    });
 };
-
-// Re-export so callers don't need to import directly
-export { InteractionRequiredAuthError };
