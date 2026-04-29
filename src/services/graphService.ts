@@ -75,24 +75,39 @@ export class GraphService {
 
   /**
    * Search users in the directory for autocomplete.
-   * Requires ConsistencyLevel: eventual + $count for startswith filters.
+   * Uses $search (recommended for people picker) with ConsistencyLevel: eventual.
+   * Requires User.Read.All or Directory.Read.All with admin consent.
    */
   async searchUsers(query: string): Promise<{ displayName: string; mail: string; userPrincipalName: string }[]> {
     if (!query || query.length < 2) return [];
     const client = this.getClient();
     try {
+      // $search is more powerful than startswith and supports partial word matching
       const response = await client
         .api('/users')
         .header('ConsistencyLevel', 'eventual')
-        .query({ $count: 'true' })
-        .filter(`startswith(displayName,'${query}') or startswith(mail,'${query}') or startswith(userPrincipalName,'${query}')`)
+        .search(`"displayName:${query}" OR "mail:${query}" OR "userPrincipalName:${query}"`)
         .select('displayName,mail,userPrincipalName')
         .top(10)
         .get();
       return response.value ?? [];
-    } catch (error) {
-      console.error("Erro ao buscar usuários:", error);
-      return [];
+    } catch (searchError) {
+      // Fallback: try $filter if $search fails (e.g. insufficient permissions)
+      console.warn('$search falhou, tentando $filter:', searchError);
+      try {
+        const response = await client
+          .api('/users')
+          .header('ConsistencyLevel', 'eventual')
+          .filter(`startswith(displayName,'${query}') or startswith(mail,'${query}')`)
+          .select('displayName,mail,userPrincipalName')
+          .top(10)
+          .count(true)
+          .get();
+        return response.value ?? [];
+      } catch (filterError) {
+        console.error('Falha na busca de usuários. Verifique se User.Read.All ou Directory.Read.All foi concedido no App Registration:', filterError);
+        return [];
+      }
     }
   }
 
