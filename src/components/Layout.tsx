@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail, Shield, User, LogOut, Settings, LayoutDashboard } from 'lucide-react';
+import { Shield, User, LogOut, Settings, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Link, useLocation } from 'react-router-dom';
 
