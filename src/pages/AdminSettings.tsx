@@ -78,10 +78,8 @@ export const AdminSettings: React.FC = () => {
       }
     } catch (e: any) {
       if (e.errorCode !== 'user_cancelled') {
-        setValidationError(
-          'Falha na validação. Verifique se o App Registration está configurado corretamente no Azure ' +
-          'e se as permissões foram concedidas (Grant admin consent).'
-        );
+        const errorMsg = e.message || e.errorCode || 'Erro desconhecido';
+        setValidationError(`Falha na validação: ${errorMsg}`);
       }
       console.error(e);
     } finally {

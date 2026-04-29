@@ -50,7 +50,8 @@ export const Dashboard: React.FC = () => {
       }
     } catch (e: any) {
       if (e.errorCode !== 'user_cancelled') {
-        setConnectError('Falha ao conectar. Verifique se o App Registration está configurado corretamente no Azure.');
+        const errorMsg = e.message || e.errorCode || 'Erro desconhecido';
+        setConnectError(`Falha ao conectar: ${errorMsg}`);
       }
       console.error(e);
     }

@@ -20,8 +20,15 @@ export const loginRequest = {
 let msalInstance: PublicClientApplication | null = null;
 
 export const initializeMsal = (settings: AppSettings) => {
+    const config = getMsalConfig(settings);
     if (!msalInstance) {
-        msalInstance = new PublicClientApplication(getMsalConfig(settings));
+        msalInstance = new PublicClientApplication(config);
+    } else {
+        const currentConfig = msalInstance.getConfiguration();
+        if (currentConfig.auth.clientId !== settings.clientId || 
+            currentConfig.auth.authority !== config.auth.authority) {
+            msalInstance = new PublicClientApplication(config);
+        }
     }
     return msalInstance;
 };
