@@ -1,5 +1,5 @@
 import { PublicClientApplication, type Configuration } from "@azure/msal-browser";
-import { AppSettings } from "../hooks/useSettings";
+import type { AppSettings } from "../hooks/useSettings";
 
 export const getMsalConfig = (settings: AppSettings): Configuration => ({
     auth: {
