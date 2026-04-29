@@ -57,23 +57,25 @@ export class GraphService {
 
   /**
    * Resolve a user email/name to their Graph user ID.
-   * Using the object ID avoids issues with UPN vs email mismatches.
+   * Falls back to using the email directly if resolution fails.
    */
   private async resolveUserId(client: Client, emailOrUpn: string): Promise<string> {
     try {
+      // Do NOT use encodeURIComponent — the Graph SDK encodes automatically.
       const user = await client
-        .api(`/users/${encodeURIComponent(emailOrUpn)}`)
+        .api(`/users/${emailOrUpn}`)
         .select('id,mail,userPrincipalName')
         .get();
       return user.id;
     } catch {
-      // If resolution fails, fall back to using the email directly
+      // Resolution failed — fall back to using the email directly
       return emailOrUpn;
     }
   }
 
   /**
    * Search users in the directory for autocomplete.
+   * Requires ConsistencyLevel: eventual + $count for startswith filters.
    */
   async searchUsers(query: string): Promise<{ displayName: string; mail: string; userPrincipalName: string }[]> {
     if (!query || query.length < 2) return [];
@@ -81,11 +83,13 @@ export class GraphService {
     try {
       const response = await client
         .api('/users')
+        .header('ConsistencyLevel', 'eventual')
+        .query({ $count: 'true' })
         .filter(`startswith(displayName,'${query}') or startswith(mail,'${query}') or startswith(userPrincipalName,'${query}')`)
         .select('displayName,mail,userPrincipalName')
         .top(10)
         .get();
-      return response.value;
+      return response.value ?? [];
     } catch (error) {
       console.error("Erro ao buscar usuários:", error);
       return [];
