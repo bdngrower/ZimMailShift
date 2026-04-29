@@ -17,7 +17,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <Shield size={14} />
               <span>Azure AD</span>
             </div>
-            <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#1e293b', display: 'flex', alignItems: 'center', justify-content: 'center' }}>
+            <div style={{ width: '2rem', height: '2rem', borderRadius: '50%', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <User size={16} />
             </div>
           </div>
