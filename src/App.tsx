@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import { Layout } from "./components/Layout";
@@ -7,11 +7,11 @@ import { Dashboard } from "./pages/Dashboard";
 import { AdminSettings } from "./pages/AdminSettings";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { useSettings } from "./hooks/useSettings";
-import { initializeMsal } from "./lib/msal";
+import { initializeMsal, handleRedirect, getAccount } from "./lib/msal";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#0f172a] text-slate-400">Loading...</div>;
+  if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0b1221', color: '#475569' }}>Carregando...</div>;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
@@ -19,14 +19,17 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const AppContent = () => {
   const { user } = useAuth();
   const { settings, loading } = useSettings();
+  const [msalAccount, setMsalAccount] = useState<any>(null);
 
   useEffect(() => {
-    if (settings && settings.clientId && settings.tenantId) {
-      try {
-        initializeMsal(settings);
-      } catch (e) {
-        console.error("Failed to initialize MSAL", e);
-      }
+    if (settings?.clientId && settings?.tenantId) {
+      initializeMsal(settings)
+        .then(() => handleRedirect())
+        .then(() => {
+          const account = getAccount();
+          if (account) setMsalAccount(account);
+        })
+        .catch(e => console.error("MSAL init/redirect error", e));
     }
   }, [settings]);
 
@@ -39,13 +42,13 @@ const AppContent = () => {
         
         <Route path="/dashboard" element={
           <ProtectedRoute>
-            <Dashboard />
+            <Dashboard msalAccount={msalAccount} setMsalAccount={setMsalAccount} />
           </ProtectedRoute>
         } />
         
         <Route path="/admin/settings" element={
           <ProtectedRoute>
-            <AdminSettings />
+            <AdminSettings msalAccount={msalAccount} setMsalAccount={setMsalAccount} />
           </ProtectedRoute>
         } />
         
