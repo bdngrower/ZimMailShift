@@ -130,9 +130,9 @@ export default async function handler(req, res) {
         const message = await graphRequest(token,
           `/users/${encodeURIComponent(sourceEmail)}/messages/${messageId}`
         );
-        // Create in destination
+        // Create in destination inbox
         const newMsg = await graphRequest(token,
-          `/users/${encodeURIComponent(destEmail)}/messages`,
+          `/users/${encodeURIComponent(destEmail)}/mailFolders/inbox/messages`,
           { method: 'POST', body: message }
         );
         // Delete from source
@@ -149,7 +149,7 @@ export default async function handler(req, res) {
           `/users/${encodeURIComponent(destEmail)}/messages/${newMessageId}`
         );
         await graphRequest(token,
-          `/users/${encodeURIComponent(sourceEmail)}/messages`,
+          `/users/${encodeURIComponent(sourceEmail)}/mailFolders/inbox/messages`,
           { method: 'POST', body: message }
         );
         await graphRequest(token,
