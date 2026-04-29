@@ -5,12 +5,19 @@ export const loginRequest = {
     scopes: ["User.Read", "Mail.ReadWrite", "Mail.ReadWrite.Shared", "Mail.Send", "Directory.Read.All"]
 };
 
-// Singleton instance wrapper
-let msalInstance: PublicClientApplication | null = null;
-let msalInitializedPromise: Promise<void> | null = null;
+// ── Early initialization ──
+// Read settings from localStorage synchronously at module load time
+// so MSAL can process the redirect response before React Router runs.
+function loadSettingsSync(): AppSettings | null {
+    try {
+        const stored = localStorage.getItem('zimMailShift_settings');
+        if (stored) return JSON.parse(stored);
+    } catch { /* ignore */ }
+    return null;
+}
 
-export const initializeMsal = (settings: AppSettings): Promise<void> => {
-    const config = {
+function createMsalInstance(settings: AppSettings): PublicClientApplication {
+    return new PublicClientApplication({
         auth: {
             clientId: settings.clientId,
             authority: `https://login.microsoftonline.com/${settings.tenantId}`,
@@ -22,24 +29,54 @@ export const initializeMsal = (settings: AppSettings): Promise<void> => {
             cacheLocation: "sessionStorage",
             storeAuthStateInCookie: false,
         }
-    };
+    });
+}
 
-    msalInstance = new PublicClientApplication(config);
-    msalInitializedPromise = msalInstance.initialize();
-    return msalInitializedPromise;
+// Create the instance immediately if settings exist
+let msalInstance: PublicClientApplication | null = null;
+let msalReadyPromise: Promise<void> | null = null;
+const earlySettings = loadSettingsSync();
+
+if (earlySettings?.clientId && earlySettings?.tenantId) {
+    msalInstance = createMsalInstance(earlySettings);
+    // Initialize and handle redirect IMMEDIATELY — before React Router can interfere
+    msalReadyPromise = msalInstance.initialize()
+        .then(() => msalInstance!.handleRedirectPromise())
+        .then((result) => {
+            if (result?.account) {
+                msalInstance!.setActiveAccount(result.account);
+            } else {
+                // No redirect result — check if we have an active account from a previous session
+                const accounts = msalInstance!.getAllAccounts();
+                if (accounts.length > 0) {
+                    msalInstance!.setActiveAccount(accounts[0]);
+                }
+            }
+        })
+        .catch(e => console.error("MSAL early init error:", e));
+}
+
+// ── Public API ──
+
+/**
+ * (Re-)initialize MSAL with new settings. Used when user saves settings for the first time
+ * or changes them. Does NOT re-handle redirects since this is called mid-session.
+ */
+export const initializeMsal = async (settings: AppSettings): Promise<void> => {
+    msalInstance = createMsalInstance(settings);
+    await msalInstance.initialize();
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length > 0) {
+        msalInstance.setActiveAccount(accounts[0]);
+    }
 };
 
 /**
- * Handle the redirect result after returning from Microsoft login page.
- * Must be called on app startup.
+ * Wait for the early MSAL initialization to complete.
+ * Call this in App.tsx before checking for accounts.
  */
-export const handleRedirect = async (): Promise<void> => {
-    if (!msalInstance) return;
-    await msalInitializedPromise;
-    const result = await msalInstance.handleRedirectPromise();
-    if (result?.account) {
-        msalInstance.setActiveAccount(result.account);
-    }
+export const waitForMsalReady = (): Promise<void> => {
+    return msalReadyPromise ?? Promise.resolve();
 };
 
 /**
@@ -47,12 +84,11 @@ export const handleRedirect = async (): Promise<void> => {
  */
 export const login = async (): Promise<void> => {
     if (!msalInstance) return;
-    await msalInitializedPromise;
     return msalInstance.loginRedirect(loginRequest);
 };
 
 export const getMsalInstance = () => msalInstance;
 
 export const getAccount = () => {
-    return msalInstance ? msalInstance.getActiveAccount() : null;
+    return msalInstance?.getActiveAccount() ?? null;
 };

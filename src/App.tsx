@@ -7,7 +7,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { AdminSettings } from "./pages/AdminSettings";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { useSettings } from "./hooks/useSettings";
-import { initializeMsal, handleRedirect, getAccount } from "./lib/msal";
+import { waitForMsalReady, getAccount } from "./lib/msal";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -20,20 +20,18 @@ const AppContent = () => {
   const { user } = useAuth();
   const { settings, loading } = useSettings();
   const [msalAccount, setMsalAccount] = useState<any>(null);
+  const [msalReady, setMsalReady] = useState(false);
 
+  // Wait for MSAL to finish processing the redirect (if any)
   useEffect(() => {
-    if (settings?.clientId && settings?.tenantId) {
-      initializeMsal(settings)
-        .then(() => handleRedirect())
-        .then(() => {
-          const account = getAccount();
-          if (account) setMsalAccount(account);
-        })
-        .catch(e => console.error("MSAL init/redirect error", e));
-    }
-  }, [settings]);
+    waitForMsalReady().then(() => {
+      const account = getAccount();
+      if (account) setMsalAccount(account);
+      setMsalReady(true);
+    });
+  }, []);
 
-  if (loading) return null;
+  if (loading || !msalReady) return null;
 
   return (
     <Layout>
