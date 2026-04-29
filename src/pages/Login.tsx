@@ -19,7 +19,7 @@ export const Login: React.FC = () => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      setError('Invalid credentials. Please check your email and password.');
+      setError('Credenciais inválidas. Verifique seu e-mail e senha.');
       setLoading(false);
     } else {
       navigate('/dashboard');
@@ -28,7 +28,6 @@ export const Login: React.FC = () => {
 
   return (
     <div className="login-page">
-      {/* Background decoration */}
       <div className="login-bg-glow-1" />
       <div className="login-bg-glow-2" />
 
@@ -38,7 +37,6 @@ export const Login: React.FC = () => {
         transition={{ duration: 0.5, ease: 'easeOut' }}
         className="login-card"
       >
-        {/* Brand */}
         <div className="login-brand">
           <div className="login-brand-icon" style={{ background: 'transparent', boxShadow: 'none' }}>
             <img src="/logo.png" alt="ZimMailShift" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -47,8 +45,8 @@ export const Login: React.FC = () => {
         </div>
 
         <div className="login-header">
-          <h1 className="login-title">Welcome back</h1>
-          <p className="login-subtitle">Sign in to your administration account</p>
+          <h1 className="login-title">Bem-vindo de volta</h1>
+          <p className="login-subtitle">Entre na sua conta de administração</p>
         </div>
 
         {error && (
@@ -64,15 +62,15 @@ export const Login: React.FC = () => {
 
         <form onSubmit={handleLogin} className="login-form">
           <div className="login-field">
-            <label className="login-label">Email address</label>
-            <div className="login-input-wrapper">
+            <label className="login-label">Endereço de e-mail</label>
+            <div className="login-input-wrap">
               <Mail className="login-input-icon" size={16} />
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="login-input"
-                placeholder="admin@company.com"
+                placeholder="admin@empresa.com.br"
                 autoComplete="email"
                 required
               />
@@ -80,8 +78,8 @@ export const Login: React.FC = () => {
           </div>
 
           <div className="login-field">
-            <label className="login-label">Password</label>
-            <div className="login-input-wrapper">
+            <label className="login-label">Senha</label>
+            <div className="login-input-wrap">
               <Lock className="login-input-icon" size={16} />
               <input
                 type="password"
@@ -95,23 +93,15 @@ export const Login: React.FC = () => {
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="login-submit"
-          >
-            {loading ? (
-              <Loader2 className="animate-spin" size={18} />
-            ) : (
-              <LogIn size={18} />
-            )}
-            {loading ? 'Signing in...' : 'Sign in'}
+          <button type="submit" disabled={loading} className="login-submit">
+            {loading ? <Loader2 className="animate-spin" size={18} /> : <LogIn size={18} />}
+            {loading ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
 
         <div className="login-footer">
           <Shield size={12} />
-          <span>Secured by Supabase Auth · Enterprise Grade</span>
+          <span>Autenticação segura via Supabase</span>
         </div>
       </motion.div>
     </div>

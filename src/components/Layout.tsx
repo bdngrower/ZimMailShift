@@ -8,23 +8,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const location = useLocation();
 
   const navItems = [
-    { path: '/dashboard', label: 'Operations', icon: <LayoutDashboard size={18} /> },
-    { path: '/admin/settings', label: 'Settings', icon: <Settings size={18} /> },
+    { path: '/dashboard', label: 'Operações', icon: <LayoutDashboard size={18} /> },
+    { path: '/admin/settings', label: 'Configurações', icon: <Settings size={18} /> },
   ];
 
   if (!user) {
     return (
       <div className="auth-page-wrapper">
-        <nav className="public-nav">
-          <div className="public-nav-inner">
-            <div className="brand">
-              <div className="brand-logo" style={{ background: 'transparent', boxShadow: 'none' }}>
-                <img src="/logo.png" alt="ZimMailShift" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-              </div>
-              <span className="brand-name">ZimMailShift</span>
-            </div>
-          </div>
-        </nav>
         {children}
       </div>
     );
@@ -62,7 +52,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
           <button onClick={signOut} className="signout-btn">
             <LogOut size={15} />
-            Sign Out
+            Sair
           </button>
         </div>
       </aside>
