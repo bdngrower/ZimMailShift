@@ -59,6 +59,25 @@ export const Dashboard: React.FC = () => {
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<any>({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
 
+  // Auto-fetch folders when source is a valid email
+  useEffect(() => {
+    if (!source || !source.includes('@')) {
+      setFolders([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setLoadingFolders(true);
+      try {
+        const f = await graphService.getFolders(source);
+        setFolders(f);
+      } catch {
+        setFolders([]);
+      }
+      setLoadingFolders(false);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [source]);
+
   // Config
   const [source, setSource] = useState('');
   const [destination, setDestination] = useState('');
@@ -189,16 +208,7 @@ export const Dashboard: React.FC = () => {
     setSource(email);
     setShowSourceDropdown(false);
     sourceSearch.setResults([]);
-
-    setLoadingFolders(true);
-    try {
-      const f = await graphService.getFolders(email);
-      setFolders(f);
-    } catch {
-      setFolders([]);
-    }
     setSelectedFolder({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
-    setLoadingFolders(false);
   };
 
   if (settingsLoading) return null;
@@ -278,13 +288,14 @@ export const Dashboard: React.FC = () => {
                         }
                       }
                     }
-                    setSelectedFolder(f || { id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
+                    if (!f && id === 'inbox') f = { id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' };
+                    setSelectedFolder(f);
                   }}
                 >
                   <option value="inbox">Caixa de Entrada (Inbox) — Padrão</option>
                   {folders.map(f => (
                     <React.Fragment key={f.id}>
-                      <option value={f.id}>{f.displayName}</option>
+                      {f.wellKnownName !== 'inbox' && <option value={f.id}>{f.displayName}</option>}
                       {f.children?.map((c: any) => (
                         <option key={c.id} value={c.id}>&nbsp;&nbsp;&nbsp;↳ {c.displayName}</option>
                       ))}
