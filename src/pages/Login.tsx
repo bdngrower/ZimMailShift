@@ -40,8 +40,8 @@ export const Login: React.FC = () => {
       >
         {/* Brand */}
         <div className="login-brand">
-          <div className="login-brand-icon">
-            <Mail size={22} />
+          <div className="login-brand-icon" style={{ background: 'transparent', boxShadow: 'none' }}>
+            <img src="/logo.png" alt="ZimMailShift" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <span className="login-brand-name">ZimMailShift</span>
         </div>

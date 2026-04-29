@@ -18,7 +18,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         <nav className="public-nav">
           <div className="public-nav-inner">
             <div className="brand">
-              <div className="brand-logo"><Mail size={18} /></div>
+              <div className="brand-logo" style={{ background: 'transparent', boxShadow: 'none' }}>
+                <img src="/logo.png" alt="ZimMailShift" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              </div>
               <span className="brand-name">ZimMailShift</span>
             </div>
           </div>
@@ -32,7 +34,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-logo"><Mail size={18} /></div>
+          <div className="brand-logo" style={{ background: 'transparent', boxShadow: 'none' }}>
+            <img src="/logo.png" alt="ZimMailShift" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </div>
           <span className="brand-name">ZimMailShift</span>
         </div>
 
