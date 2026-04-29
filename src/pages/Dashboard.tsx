@@ -17,7 +17,7 @@ function useEmailSearch() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ displayName: string; mail: string; userPrincipalName: string }[]>([]);
   const [searching, setSearching] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
