@@ -59,7 +59,7 @@ export class GraphService {
         .api(`/users/${sourceUser}/messages/${messageId}`)
         .get();
 
-      await client
+      const newMessage = await client
         .api(`/users/${destinationUser}/messages`)
         .post(message);
 
@@ -67,9 +67,34 @@ export class GraphService {
         .api(`/users/${sourceUser}/messages/${messageId}`)
         .delete();
         
-      return true;
+      return newMessage.id; // Return the new ID for rollback purposes
     } catch (error) {
       console.error("Error moving email:", error);
+      throw error;
+    }
+  }
+
+  async rollbackMove(sourceUser: string, destinationUser: string, newIdInDestination: string) {
+    const client = this.getClient();
+    try {
+      // Get the message from destination
+      const message = await client
+        .api(`/users/${destinationUser}/messages/${newIdInDestination}`)
+        .get();
+
+      // Copy it back to source
+      await client
+        .api(`/users/${sourceUser}/messages`)
+        .post(message);
+
+      // Delete from destination
+      await client
+        .api(`/users/${destinationUser}/messages/${newIdInDestination}`)
+        .delete();
+        
+      return true;
+    } catch (error) {
+      console.error("Error rolling back email:", error);
       throw error;
     }
   }
