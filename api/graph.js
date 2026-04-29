@@ -115,17 +115,55 @@ export default async function handler(req, res) {
         return res.status(200).json(data.value ?? []);
       }
 
+      case 'get_folders': {
+        const { userEmail } = params;
+        const res = await graphRequest(token, `/users/${encodeURIComponent(userEmail)}/mailFolders?$top=100`);
+        const folders = res.value || [];
+        
+        // Fetch 1 level of child folders for those that have them
+        for (const f of folders) {
+          if (f.childFolderCount > 0) {
+            const childRes = await graphRequest(token, `/users/${encodeURIComponent(userEmail)}/mailFolders/${f.id}/childFolders?$top=100`);
+            f.children = childRes.value || [];
+          } else {
+            f.children = [];
+          }
+        }
+        return res.status(200).json(folders);
+      }
+
+      case 'ensure_folder': {
+        const { userEmail, folderName, parentWellKnownName } = params;
+        // Search if exists in the specified parent (or root)
+        const parentPath = parentWellKnownName ? `/mailFolders/${parentWellKnownName}` : '';
+        const searchRes = await graphRequest(token, `/users/${encodeURIComponent(userEmail)}${parentPath}/childFolders?$filter=displayName eq '${folderName}'`);
+        
+        if (searchRes.value && searchRes.value.length > 0) {
+          return res.status(200).json({ id: searchRes.value[0].id });
+        }
+        
+        // Create if not exists
+        const createRes = await graphRequest(token, `/users/${encodeURIComponent(userEmail)}${parentPath}/childFolders`, {
+          method: 'POST',
+          body: { displayName: folderName }
+        });
+        return res.status(200).json({ id: createRes.id });
+      }
+
       case 'get_emails': {
-        const { userEmail, filter } = params;
+        const { userEmail, filter, folderId } = params;
+        const targetFolder = folderId || 'inbox';
         const odata = buildDateFilter(filter);
-        let url = `/users/${encodeURIComponent(userEmail)}/messages?$select=id,subject,receivedDateTime,from&$top=100&$orderby=receivedDateTime desc`;
+        let url = `/users/${encodeURIComponent(userEmail)}/mailFolders/${targetFolder}/messages?$select=id,subject,receivedDateTime,from&$top=100&$orderby=receivedDateTime desc`;
         if (odata) url += `&$filter=${encodeURIComponent(odata)}`;
         const data = await graphRequest(token, url);
         return res.status(200).json(data.value ?? []);
       }
 
       case 'move_email': {
-        const { sourceEmail, messageId, destEmail } = params;
+        const { sourceEmail, messageId, destEmail, destFolderId } = params;
+        const targetFolder = destFolderId || 'inbox';
+        
         // Get message from source
         const message = await graphRequest(token,
           `/users/${encodeURIComponent(sourceEmail)}/messages/${messageId}`
@@ -138,9 +176,9 @@ export default async function handler(req, res) {
           value: message.isRead ? "1" : "0"
         });
 
-        // Create in destination inbox
+        // Create in destination folder
         const newMsg = await graphRequest(token,
-          `/users/${encodeURIComponent(destEmail)}/mailFolders/inbox/messages`,
+          `/users/${encodeURIComponent(destEmail)}/mailFolders/${targetFolder}/messages`,
           { method: 'POST', body: message }
         );
         // Delete from source
@@ -152,7 +190,10 @@ export default async function handler(req, res) {
       }
 
       case 'rollback': {
-        const { sourceEmail, destEmail, newMessageId } = params;
+        const { sourceEmail, destEmail, newMessageId, destFolderId, sourceFolderId } = params;
+        const targetDestFolder = destFolderId || 'inbox';
+        const targetSourceFolder = sourceFolderId || 'inbox';
+
         const message = await graphRequest(token,
           `/users/${encodeURIComponent(destEmail)}/messages/${newMessageId}`
         );
@@ -165,7 +206,7 @@ export default async function handler(req, res) {
         });
 
         await graphRequest(token,
-          `/users/${encodeURIComponent(sourceEmail)}/mailFolders/inbox/messages`,
+          `/users/${encodeURIComponent(sourceEmail)}/mailFolders/${targetSourceFolder}/messages`,
           { method: 'POST', body: message }
         );
         await graphRequest(token,

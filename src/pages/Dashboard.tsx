@@ -53,7 +53,12 @@ export const Dashboard: React.FC = () => {
   const [status, setStatus] = useState<'idle'|'running'|'completed'|'error'|'rolling_back'|'previewed'>('idle');
   const [logs, setLogs] = useState<{ time: string; message: string; type: 'info'|'success'|'error' }[]>([]);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
-  const [movedEmails, setMovedEmails] = useState<{ subject: string; newId: string }[]>([]);
+  const [movedEmails, setMovedEmails] = useState<{ subject: string; newId: string, sourceFolderId: string, destFolderId: string }[]>([]);
+  // Folders
+  const [folders, setFolders] = useState<any[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState<any>({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
+
   // Config
   const [source, setSource] = useState('');
   const [destination, setDestination] = useState('');
@@ -102,9 +107,9 @@ export const Dashboard: React.FC = () => {
     if (!source) return;
     setPreviewing(true); setLogs([]); setPreviewCount(null);
     const df = getDateFilter();
-    addLog(`Buscando e-mails em ${source} ${getFilterLabel()}...`);
+    addLog(`Buscando e-mails em ${source} (Pasta: ${selectedFolder.displayName}) ${getFilterLabel()}...`);
     try {
-      const emails = await graphService.getEmailsByFilter(source, df);
+      const emails = await graphService.getEmailsByFilter(source, df, selectedFolder.id);
       const count = emails?.length ?? 0;
       setPreviewCount(count); setStatus('previewed');
       count === 0
@@ -122,16 +127,31 @@ export const Dashboard: React.FC = () => {
     const df = getDateFilter();
     addLog(`Iniciando migração de ${source} para ${destination}...`);
     try {
-      const emails = await graphService.getEmailsByFilter(source, df);
+      // Resolve Destination Folder
+      let targetDestFolderId = 'inbox';
+      if (selectedFolder.wellKnownName) {
+        targetDestFolderId = selectedFolder.wellKnownName;
+        addLog(`Mapeando para pasta padrão: ${targetDestFolderId}`);
+      } else {
+        addLog(`Verificando/Criando pasta "${selectedFolder.displayName}" no destino...`);
+        try {
+          targetDestFolderId = await graphService.ensureFolder(destination, selectedFolder.displayName, selectedFolder.parentWellKnownName);
+        } catch (err) {
+          addLog(`Falha ao criar pasta destino. Usando Inbox.`, 'error');
+        }
+      }
+
+      const emails = await graphService.getEmailsByFilter(source, df, selectedFolder.id);
       if (!emails?.length) { addLog('Nenhum e-mail encontrado.', 'info'); setStatus('completed'); setLoading(false); return; }
       addLog(`Encontrados ${emails.length} e-mails. Movimentação em andamento...`, 'success');
       let count = 0;
-      const moved: { subject: string; newId: string }[] = [];
+      const moved: { subject: string; newId: string, sourceFolderId: string, destFolderId: string }[] = [];
+      
       for (const email of emails) {
         try {
           addLog(`Movendo: "${email.subject}"...`);
-          const newId = await graphService.moveEmailToSharedMailbox(source, email.id, destination);
-          moved.push({ subject: email.subject, newId });
+          const newId = await graphService.moveEmailToSharedMailbox(source, email.id, destination, targetDestFolderId);
+          moved.push({ subject: email.subject, newId, sourceFolderId: selectedFolder.id, destFolderId: targetDestFolderId });
           count++;
           setProgress(Math.round((count / emails.length) * 100));
           addLog(`Movido: ${email.subject}`, 'success');
@@ -154,7 +174,7 @@ export const Dashboard: React.FC = () => {
     for (const email of movedEmails) {
       try {
         addLog(`Restaurando: "${email.subject}"...`);
-        await graphService.rollbackMove(source, destination, email.newId);
+        await graphService.rollbackMove(source, destination, email.newId, email.sourceFolderId, email.destFolderId);
         count++; setProgress(Math.round((count / movedEmails.length) * 100));
         addLog(`Restaurado: ${email.subject}`, 'success');
       } catch (err: any) { addLog(`Falha: ${email.subject} — ${err.message || ''}`, 'error'); }
@@ -162,6 +182,23 @@ export const Dashboard: React.FC = () => {
     setMovedEmails([]); setStatus('idle');
     addLog(`Reversão concluída. ${count} e-mails restaurados.`, 'success');
     setRollingBack(false);
+  };
+
+  const handleSourceSelect = async (u: any) => {
+    const email = u.mail || u.userPrincipalName;
+    setSource(email);
+    setShowSourceDropdown(false);
+    sourceSearch.setResults([]);
+
+    setLoadingFolders(true);
+    try {
+      const f = await graphService.getFolders(email);
+      setFolders(f);
+    } catch {
+      setFolders([]);
+    }
+    setSelectedFolder({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
+    setLoadingFolders(false);
   };
 
   if (settingsLoading) return null;
@@ -204,7 +241,7 @@ export const Dashboard: React.FC = () => {
             {showSourceDropdown && sourceSearch.results.length > 0 && (
               <div className="autocomplete-dropdown">
                 {sourceSearch.results.map((u, i) => (
-                  <button key={i} className="autocomplete-item" onMouseDown={() => { setSource(u.mail || u.userPrincipalName); setShowSourceDropdown(false); sourceSearch.setResults([]); }}>
+                  <button key={i} className="autocomplete-item" onMouseDown={() => handleSourceSelect(u)}>
                     <User size={14} />
                     <div>
                       <div style={{ fontWeight: 500, color: 'white', fontSize: '0.82rem' }}>{u.displayName}</div>
@@ -216,6 +253,47 @@ export const Dashboard: React.FC = () => {
             )}
             {sourceSearch.searching && <div style={{ position: 'absolute', right: 12, top: 38, color: '#475569' }}><Loader2 size={14} className="animate-spin" /></div>}
           </div>
+
+          {/* Folder Selection */}
+          {source && (
+            <div className="form-group" style={{ position: 'relative' }}>
+              <label className="form-label">Pasta a ser migrada</label>
+              {loadingFolders ? (
+                <div style={{ fontSize: '0.85rem', color: '#64748b', padding: '0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Loader2 size={14} className="animate-spin" /> Carregando pastas...
+                </div>
+              ) : (
+                <select
+                  className="form-input"
+                  value={selectedFolder?.id || 'inbox'}
+                  onChange={e => {
+                    const id = e.target.value;
+                    let f = folders.find(x => x.id === id);
+                    if (!f) {
+                      for (const parent of folders) {
+                        const child = parent.children?.find((c: any) => c.id === id);
+                        if (child) {
+                          f = { ...child, parentWellKnownName: parent.wellKnownName || 'inbox' };
+                          break;
+                        }
+                      }
+                    }
+                    setSelectedFolder(f || { id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
+                  }}
+                >
+                  <option value="inbox">Caixa de Entrada (Inbox) — Padrão</option>
+                  {folders.map(f => (
+                    <React.Fragment key={f.id}>
+                      <option value={f.id}>{f.displayName}</option>
+                      {f.children?.map((c: any) => (
+                        <option key={c.id} value={c.id}>&nbsp;&nbsp;&nbsp;↳ {c.displayName}</option>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
 
           {/* Destination email with autocomplete */}
           <div className="form-group" style={{ position: 'relative' }}>

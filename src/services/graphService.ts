@@ -51,11 +51,36 @@ export class GraphService {
   }
 
   /**
+   * Fetch folders for a user mailbox
+   */
+  async getFolders(userEmail: string) {
+    try {
+      return await this.callProxy('get_folders', { userEmail });
+    } catch (error: any) {
+      console.error("Erro ao buscar pastas:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Ensure a folder exists in the destination
+   */
+  async ensureFolder(userEmail: string, folderName: string, parentWellKnownName?: string) {
+    try {
+      const res = await this.callProxy('ensure_folder', { userEmail, folderName, parentWellKnownName });
+      return res.id;
+    } catch (error: any) {
+      console.error("Erro ao criar pasta:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Fetch emails from a user's mailbox.
    */
-  async getEmailsByFilter(userEmail: string, filter: DateFilter) {
+  async getEmailsByFilter(userEmail: string, filter: DateFilter, folderId: string = 'inbox') {
     try {
-      return await this.callProxy('get_emails', { userEmail, filter });
+      return await this.callProxy('get_emails', { userEmail, filter, folderId });
     } catch (error: any) {
       throw new Error(`Erro ao buscar e-mails: ${error.message}`);
     }
@@ -64,16 +89,17 @@ export class GraphService {
   /**
    * Legacy compat
    */
-  async getEmailsBeforeDate(userEmail: string, date: string) {
-    return this.getEmailsByFilter(userEmail, { mode: 'before', value: date });
+  async getEmailsBeforeDate(userEmail: string, date: string, folderId: string = 'inbox') {
+    return this.getEmailsByFilter(userEmail, { mode: 'before', value: date }, folderId);
   }
 
-  async moveEmailToSharedMailbox(sourceUser: string, messageId: string, destinationUser: string) {
+  async moveEmailToSharedMailbox(sourceUser: string, messageId: string, destinationUser: string, destFolderId: string = 'inbox') {
     try {
       const result = await this.callProxy('move_email', {
         sourceEmail: sourceUser,
         messageId,
-        destEmail: destinationUser
+        destEmail: destinationUser,
+        destFolderId
       });
       return result.newId;
     } catch (error: any) {
@@ -82,12 +108,14 @@ export class GraphService {
     }
   }
 
-  async rollbackMove(sourceUser: string, destinationUser: string, newIdInDestination: string) {
+  async rollbackMove(sourceUser: string, destinationUser: string, newIdInDestination: string, sourceFolderId: string = 'inbox', destFolderId: string = 'inbox') {
     try {
       await this.callProxy('rollback', {
         sourceEmail: sourceUser,
         destEmail: destinationUser,
-        newMessageId: newIdInDestination
+        newMessageId: newIdInDestination,
+        sourceFolderId,
+        destFolderId
       });
       return true;
     } catch (error: any) {
