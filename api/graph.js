@@ -130,6 +130,14 @@ export default async function handler(req, res) {
         const message = await graphRequest(token,
           `/users/${encodeURIComponent(sourceEmail)}/messages/${messageId}`
         );
+        
+        // Hack to bypass Draft status: set PidTagMessageFlags to MSGFLAG_READ (1)
+        if (!message.singleValueExtendedProperties) message.singleValueExtendedProperties = [];
+        message.singleValueExtendedProperties.push({
+          id: "Integer 0x0E07",
+          value: message.isRead ? "1" : "0"
+        });
+
         // Create in destination inbox
         const newMsg = await graphRequest(token,
           `/users/${encodeURIComponent(destEmail)}/mailFolders/inbox/messages`,
@@ -148,6 +156,14 @@ export default async function handler(req, res) {
         const message = await graphRequest(token,
           `/users/${encodeURIComponent(destEmail)}/messages/${newMessageId}`
         );
+        
+        // Hack to bypass Draft status
+        if (!message.singleValueExtendedProperties) message.singleValueExtendedProperties = [];
+        message.singleValueExtendedProperties.push({
+          id: "Integer 0x0E07",
+          value: message.isRead ? "1" : "0"
+        });
+
         await graphRequest(token,
           `/users/${encodeURIComponent(sourceEmail)}/mailFolders/inbox/messages`,
           { method: 'POST', body: message }
