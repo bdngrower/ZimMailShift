@@ -18,7 +18,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppContent = () => {
   const { user } = useAuth();
-  const { settings, loading } = useSettings();
+  const { loading } = useSettings();
   const [msalAccount, setMsalAccount] = useState<any>(null);
   const [msalReady, setMsalReady] = useState(false);
 

@@ -23,11 +23,9 @@ function createMsalInstance(settings: AppSettings): PublicClientApplication {
             authority: `https://login.microsoftonline.com/${settings.tenantId}`,
             redirectUri: window.location.origin,
             postLogoutRedirectUri: window.location.origin,
-            navigateToLoginRequestUrl: true,
         },
         cache: {
             cacheLocation: "sessionStorage",
-            storeAuthStateInCookie: false,
         }
     });
 }
