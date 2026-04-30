@@ -90,7 +90,7 @@ export const Dashboard: React.FC = () => {
 
         if (pastLogs) {
           setLogs(pastLogs.map(l => ({
-            time: new Date(l.created_at).toLocaleTimeString(),
+            time: new Date(l.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
             message: l.message,
             type: l.type as any
           })));
@@ -116,7 +116,11 @@ export const Dashboard: React.FC = () => {
     supabase.channel(`logs-${migrationId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'zim_migration_logs', filter: `migration_id=eq.${migrationId}` }, payload => {
         const log = payload.new as any;
-        setLogs(prev => [...prev, { time: new Date(log.created_at).toLocaleTimeString(), message: log.message, type: log.type }]);
+        setLogs(prev => [...prev, { 
+          time: new Date(log.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }), 
+          message: log.message, 
+          type: log.type 
+        }]);
       })
       .subscribe();
 
@@ -180,7 +184,8 @@ export const Dashboard: React.FC = () => {
 
 
   const addLog = (message: string, type: 'info'|'success'|'error' = 'info') => {
-    setLogs(p => [{ time: new Date().toLocaleTimeString(), message, type }, ...p]);
+    const time = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setLogs(p => [{ time, message, type }, ...p]);
   };
 
   const getDateFilter = () => {
