@@ -58,6 +58,7 @@ export const Dashboard: React.FC = () => {
   const [folders, setFolders] = useState<any[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<any>({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
+  const [includeSentItems, setIncludeSentItems] = useState(false);
 
   // Config
   const [source, setSource] = useState('');
@@ -93,7 +94,7 @@ export const Dashboard: React.FC = () => {
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
   const [showDestDropdown, setShowDestDropdown] = useState(false);
 
-  const { settings, loading: settingsLoading } = useSettings();
+  const { activeProfile, loading: settingsLoading } = useSettings();
 
   const addLog = (message: string, type: 'info'|'success'|'error' = 'info') => {
     setLogs(p => [{ time: new Date().toLocaleTimeString(), message, type }, ...p]);
@@ -129,7 +130,15 @@ export const Dashboard: React.FC = () => {
     addLog(`Buscando e-mails em ${source} (Pasta: ${selectedFolder.displayName}) ${getFilterLabel()}...`);
     try {
       const emails = await graphService.getEmailsByFilter(source, df, selectedFolder.id);
-      const count = emails?.length ?? 0;
+      let count = emails?.length ?? 0;
+      
+      if (includeSentItems && selectedFolder.wellKnownName !== 'sentitems') {
+        try {
+          const sentEmails = await graphService.getEmailsByFilter(source, df, 'sentitems');
+          count += sentEmails?.length ?? 0;
+        } catch(e) {}
+      }
+
       setPreviewCount(count); setStatus('previewed');
       count === 0
         ? addLog('Nenhum e-mail encontrado com esses critérios.', 'info')
@@ -160,26 +169,50 @@ export const Dashboard: React.FC = () => {
         }
       }
 
-      const emails = await graphService.getEmailsByFilter(source, df, selectedFolder.id);
-      if (!emails?.length) { addLog('Nenhum e-mail encontrado.', 'info'); setStatus('completed'); setLoading(false); return; }
-      addLog(`Encontrados ${emails.length} e-mails. Movimentação em andamento...`, 'success');
+      let allEmails = await graphService.getEmailsByFilter(source, df, selectedFolder.id);
+      
+      // If the user wants to include sent items AND they didn't manually select "Sent Items" as the main folder
+      if (includeSentItems && selectedFolder.wellKnownName !== 'sentitems') {
+        addLog(`Buscando Itens Enviados adicionais...`);
+        try {
+          const sentEmails = await graphService.getEmailsByFilter(source, df, 'sentitems');
+          // Add a property so we know they belong to sent items
+          const sentWithMeta = sentEmails.map((e: any) => ({ ...e, __isSentItem: true }));
+          allEmails = allEmails.concat(sentWithMeta);
+        } catch (err: any) {
+          addLog(`Aviso: não foi possível buscar Itens Enviados: ${err.message}`, 'error');
+        }
+      }
+
+      if (!allEmails?.length) { addLog('Nenhum e-mail encontrado.', 'info'); setStatus('completed'); setLoading(false); return; }
+      addLog(`Encontrados ${allEmails.length} e-mails. Movimentação em andamento...`, 'success');
       let count = 0;
       const moved: { subject: string; newId: string, sourceFolderId: string, destFolderId: string }[] = [];
       
-      for (const email of emails) {
+      for (const email of allEmails) {
         try {
           addLog(`Movendo: "${email.subject}"...`);
-          const newId = await graphService.moveEmailToSharedMailbox(source, email.id, destination, targetDestFolderId);
-          moved.push({ subject: email.subject, newId, sourceFolderId: selectedFolder.id, destFolderId: targetDestFolderId });
+          
+          let actualDestFolderId = targetDestFolderId;
+          let actualSourceFolderId = selectedFolder.id;
+
+          if (email.__isSentItem) {
+            actualSourceFolderId = 'sentitems';
+            actualDestFolderId = 'sentitems'; // Default well-known name for Sent Items
+            // Try to map to destination sentitems natively
+          }
+
+          const newId = await graphService.moveEmailToSharedMailbox(source, email.id, destination, actualDestFolderId);
+          moved.push({ subject: email.subject, newId, sourceFolderId: actualSourceFolderId, destFolderId: actualDestFolderId });
           count++;
-          setProgress(Math.round((count / emails.length) * 100));
+          setProgress(Math.round((count / allEmails.length) * 100));
           addLog(`Movido: ${email.subject}`, 'success');
         } catch (err: any) {
           addLog(`Falha: ${email.subject} — ${err.message || ''}`, 'error');
         }
       }
       setMovedEmails(moved); setStatus('completed');
-      addLog(`Concluído! ${count} de ${emails.length} e-mails movidos.`, 'success');
+      addLog(`Concluído! ${count} de ${allEmails.length} e-mails movidos.`, 'success');
     } catch (e: any) {
       setStatus('error'); addLog(`Erro: ${e.message || 'Falha na migração.'}`, 'error');
     } finally { setLoading(false); }
@@ -213,7 +246,7 @@ export const Dashboard: React.FC = () => {
 
   if (settingsLoading) return null;
 
-  if (!settings?.clientId || !settings?.tenantId || !settings?.clientSecret) {
+  if (!activeProfile?.clientId || !activeProfile?.tenantId || !activeProfile?.clientSecret) {
     return (
       <div className="empty-state">
         <div className="empty-icon"><Key size={28} /></div>
@@ -303,6 +336,20 @@ export const Dashboard: React.FC = () => {
                   ))}
                 </select>
               )}
+            </div>
+          )}
+
+          {source && selectedFolder?.wellKnownName !== 'sentitems' && (
+            <div className="form-group" style={{ marginTop: '-0.5rem', marginBottom: '1rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                <input 
+                  type="checkbox" 
+                  checked={includeSentItems}
+                  onChange={e => setIncludeSentItems(e.target.checked)}
+                  style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#4f46e5' }}
+                />
+                Também mover e-mails da caixa de Itens Enviados
+              </label>
             </div>
           )}
 

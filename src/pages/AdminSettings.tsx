@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Save, Settings, Key, Globe, CheckCircle2, Loader2,
-  ChevronDown, ChevronUp, ExternalLink, BookOpen, AlertCircle, User, ShieldCheck
+  ChevronDown, ChevronUp, ExternalLink, BookOpen, AlertCircle, User, ShieldCheck, Trash2
 } from 'lucide-react';
 import { useSettings } from '../hooks/useSettings';
 
 export const AdminSettings: React.FC = () => {
-  const { settings, saveSettings, loading } = useSettings();
+  const { profiles, activeProfile, activeProfileId, saveProfile, deleteProfile, switchActiveProfile, loading } = useSettings();
+  
+  const [profileName, setProfileName] = useState('');
   const [tenantId, setTenantId] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -18,22 +20,42 @@ export const AdminSettings: React.FC = () => {
   const [isValidated, setIsValidated] = useState(false);
 
   useEffect(() => {
-    if (settings) {
-      setTenantId(settings.tenantId || '');
-      setClientId(settings.clientId || '');
-      setClientSecret(settings.clientSecret || '');
-      if (settings.tenantId && settings.clientId && settings.clientSecret) setGuideOpen(false);
+    if (activeProfile) {
+      setProfileName(activeProfile.name || '');
+      setTenantId(activeProfile.tenantId || '');
+      setClientId(activeProfile.clientId || '');
+      setClientSecret(activeProfile.clientSecret || '');
+      if (activeProfile.tenantId && activeProfile.clientId && activeProfile.clientSecret) {
+        setGuideOpen(false);
+      }
+    } else {
+      handleNewProfile();
     }
-  }, [settings]);
+  }, [activeProfile]);
 
-  // Removed useEffect for getAccount
+  const handleNewProfile = () => {
+    setProfileName('');
+    setTenantId('');
+    setClientId('');
+    setClientSecret('');
+    setGuideOpen(true);
+    setIsValidated(false);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const newSettings = { tenantId, clientId, clientSecret, redirectUri: window.location.origin };
-    saveSettings(newSettings);
+    const id = activeProfile?.id || Date.now().toString();
+    const newSettings = { 
+      id, 
+      name: profileName || `Cliente ${profiles.length + 1}`,
+      tenantId, 
+      clientId, 
+      clientSecret, 
+      redirectUri: window.location.origin 
+    };
+    saveProfile(newSettings);
     setSaved(true);
-    setIsValidated(false); // reset validation when settings change
+    setIsValidated(false);
     setTimeout(() => setSaved(false), 4000);
   };
 
@@ -64,10 +86,54 @@ export const AdminSettings: React.FC = () => {
 
   if (loading) return <div style={{ color: '#475569', padding: '2rem' }}>Carregando...</div>;
 
-  const isConfigured = !!(settings?.tenantId && settings?.clientId);
+  const isConfigured = !!(tenantId && clientId);
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '680px' }}>
+
+      {/* ── SELEÇÃO DE CLIENTE ── */}
+      <div className="settings-card">
+        <div className="settings-header" style={{ marginBottom: '1rem' }}>
+          <div className="settings-icon" style={{ background: 'rgba(99,102,241,0.12)', color: '#818cf8' }}>
+            <User size={18} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="settings-title">Seleção de Cliente (Tenant)</div>
+            <div className="settings-subtitle">Selecione um cliente configurado ou crie um novo</div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <select 
+            className="form-input" 
+            style={{ flex: 1 }}
+            value={activeProfileId || 'new'}
+            onChange={(e) => {
+              if (e.target.value === 'new') handleNewProfile();
+              else switchActiveProfile(e.target.value);
+            }}
+          >
+            <option value="new">+ Criar Novo Cliente</option>
+            {profiles.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {activeProfile && (
+            <button 
+              type="button" 
+              onClick={() => {
+                if(confirm('Tem certeza que deseja excluir as configurações deste cliente?')) {
+                  deleteProfile(activeProfile.id);
+                }
+              }}
+              style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', padding: '0.65rem', borderRadius: 8, cursor: 'pointer' }}
+              title="Excluir Cliente"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ── ETAPA 1: Guia ── */}
       <div className="settings-card">
@@ -127,14 +193,6 @@ export const AdminSettings: React.FC = () => {
                     <p style={{ color: '#fb923c' }}>⚠ Clique em <strong>"Conceder consentimento do administrador"</strong> após adicionar.</p>
                   </GuideStep>
 
-                  <GuideStep number="D" title="Configurações de Autenticação">
-                    <p>Em <strong>Autenticação</strong>, verifique:</p>
-                    <ul>
-                      <li>Plataforma: <strong>Aplicativo de página única (SPA)</strong></li>
-                      <li>URI de Redirecionamento: <code>{window.location.origin}</code></li>
-                    </ul>
-                  </GuideStep>
-
                 </div>
               </div>
             </motion.div>
@@ -157,6 +215,10 @@ export const AdminSettings: React.FC = () => {
               <div className="success-banner"><CheckCircle2 size={16} /> Configurações salvas com sucesso!</div>
             )}
             <div className="settings-fields">
+              <div>
+                <div className="settings-input-icon"><User size={14} /> Nome de Identificação do Cliente</div>
+                <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)} placeholder="Ex: Cliente XYZ" className="form-input" required />
+              </div>
               <div>
                 <div className="settings-input-icon"><Globe size={14} /> Tenant ID (ID do Diretório)</div>
                 <input type="text" value={tenantId} onChange={e => setTenantId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
@@ -185,7 +247,7 @@ export const AdminSettings: React.FC = () => {
           </div>
           <div>
             <div className="settings-title">Etapa 3 — Validar App Registration</div>
-            <div className="settings-subtitle">Conecte com a conta Administrador Global para validar o registro</div>
+            <div className="settings-subtitle">Teste a conexão via proxy backend</div>
           </div>
         </div>
         <div className="settings-body">

@@ -7,9 +7,20 @@ export interface DateFilter {
 
 export class GraphService {
   private getSettings() {
-    const raw = localStorage.getItem('zimMailShift_settings');
-    if (!raw) throw new Error("Configurações não encontradas. Vá para a aba Configurações.");
-    const settings = JSON.parse(raw);
+    const activeId = localStorage.getItem('zimMailShift_activeProfileId');
+    const profilesRaw = localStorage.getItem('zimMailShift_profiles');
+    
+    if (!activeId || !profilesRaw) {
+      // Legacy fallback
+      const raw = localStorage.getItem('zimMailShift_settings');
+      if (raw) return JSON.parse(raw);
+      throw new Error("Configurações não encontradas. Vá para a aba Configurações.");
+    }
+    
+    const profiles = JSON.parse(profilesRaw);
+    const settings = profiles.find((p: any) => p.id === activeId);
+    if (!settings) throw new Error("Cliente selecionado não encontrado nas configurações.");
+
     if (!settings.tenantId || !settings.clientId || !settings.clientSecret) {
       throw new Error("Tenant ID, Client ID ou Client Secret ausentes. Configure primeiro.");
     }
