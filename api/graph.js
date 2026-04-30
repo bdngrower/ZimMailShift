@@ -117,8 +117,8 @@ export default async function handler(req, res) {
 
       case 'get_folders': {
         const { userEmail } = params;
-        const res = await graphRequest(token, `/users/${encodeURIComponent(userEmail)}/mailFolders?$top=250&includeHiddenFolders=true`);
-        const folders = res.value || [];
+        const graphData = await graphRequest(token, `/users/${encodeURIComponent(userEmail)}/mailFolders?$top=250&includeHiddenFolders=true`);
+        const folders = graphData.value || [];
         
         // Fetch 1 level of child folders for ALL folders (bypassing potential childFolderCount cache issues)
         for (const f of folders) {

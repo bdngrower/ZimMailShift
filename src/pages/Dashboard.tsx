@@ -273,7 +273,14 @@ export const Dashboard: React.FC = () => {
 
         {/* Config */}
         <div className="card">
-          <div className="card-header"><Filter size={17} /> Configuração da Migração</div>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div><Filter size={17} /> Configuração da Migração</div>
+            {activeProfile && (
+              <span style={{ fontSize: '0.75rem', background: 'rgba(99,102,241,0.15)', color: '#818cf8', padding: '0.2rem 0.6rem', borderRadius: 12, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <User size={12} /> Cliente: {activeProfile.name}
+              </span>
+            )}
+          </div>
 
           {/* Source email with autocomplete */}
           <div className="form-group" style={{ position: 'relative' }}>

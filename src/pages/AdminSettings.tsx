@@ -221,11 +221,11 @@ export const AdminSettings: React.FC = () => {
               </div>
               <div>
                 <div className="settings-input-icon"><Globe size={14} /> Tenant ID (ID do Diretório)</div>
-                <input type="text" value={tenantId} onChange={e => setTenantId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
+                <input type="password" value={tenantId} onChange={e => setTenantId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
               </div>
               <div>
                 <div className="settings-input-icon"><Key size={14} /> Client ID (ID do Aplicativo)</div>
-                <input type="text" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
+                <input type="password" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" className="form-input" required />
               </div>
               <div>
                 <div className="settings-input-icon"><Key size={14} /> Client Secret (Valor do Segredo)</div>
