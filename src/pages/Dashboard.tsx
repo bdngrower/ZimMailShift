@@ -57,7 +57,7 @@ export const Dashboard: React.FC = () => {
   // Folders
   const [folders, setFolders] = useState<any[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState<any>({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
+  const [selectedFolders, setSelectedFolders] = useState<any[]>([{ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' }]);
   const [includeSentItems, setIncludeSentItems] = useState(false);
 
   // Config
@@ -130,15 +130,26 @@ export const Dashboard: React.FC = () => {
   );
 
   const handlePreview = async () => {
-    if (!source) return;
+    if (!source) {
+      addLog('Por favor, defina a Caixa de Origem.', 'error');
+      return;
+    }
+    if (selectedFolders.length === 0 && !includeSentItems) {
+      addLog('Selecione pelo menos uma pasta para pré-visualizar.', 'error');
+      return;
+    }
     setPreviewing(true); setLogs([]); setPreviewCount(null);
     const df = getDateFilter();
-    addLog(`Buscando e-mails em ${source} (Pasta: ${selectedFolder.displayName}) ${getFilterLabel()}...`);
+    addLog(`Buscando e-mails em ${source} (Pastas selecionadas: ${selectedFolders.map(f => f.displayName).join(', ')}) ${getFilterLabel()}...`);
     try {
-      const emails = await graphService.getEmailsByFilter(source, df, selectedFolder.id);
-      let count = emails?.length ?? 0;
+      let count = 0;
+      for (const folder of selectedFolders) {
+        const emails = await graphService.getEmailsByFilter(source, df, folder.id);
+        count += emails?.length ?? 0;
+      }
       
-      if (includeSentItems && selectedFolder.wellKnownName !== 'sentitems') {
+      const hasSentItemsSelected = selectedFolders.some(f => f.wellKnownName === 'sentitems');
+      if (includeSentItems && !hasSentItemsSelected) {
         try {
           const sentEmails = await graphService.getEmailsByFilter(source, df, 'sentitems');
           count += sentEmails?.length ?? 0;
@@ -156,29 +167,43 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleStart = async () => {
-    if (!source || !destination) return;
+    if (!source) { addLog('Defina a Caixa de Origem.', 'error'); return; }
+    if (!destination) { addLog('Por favor, preencha a Caixa Compartilhada de Destino antes de iniciar!', 'error'); return; }
+    if (selectedFolders.length === 0 && !includeSentItems) { addLog('Selecione pelo menos uma pasta para migrar.', 'error'); return; }
+
     setLoading(true); setStatus('running'); setProgress(0); setLogs([]); setMovedEmails([]);
     const df = getDateFilter();
     addLog(`Iniciando migração de ${source} para ${destination}...`);
     try {
-      // Resolve Destination Folder
-      let targetDestFolderId = 'inbox';
-      if (selectedFolder.wellKnownName) {
-        targetDestFolderId = selectedFolder.wellKnownName;
-        addLog(`Mapeando para pasta padrão: ${targetDestFolderId}`);
-      } else {
-        addLog(`Verificando/Criando pasta "${selectedFolder.displayName}" no destino...`);
-        try {
-          targetDestFolderId = await graphService.ensureFolder(destination, selectedFolder.displayName, selectedFolder.parentWellKnownName);
-        } catch (err) {
-          addLog(`Falha ao criar pasta destino. Usando Inbox.`, 'error');
-        }
-      }
+      let allEmails: any[] = [];
+      const hasSentItemsSelected = selectedFolders.some(f => f.wellKnownName === 'sentitems');
 
-      let allEmails = await graphService.getEmailsByFilter(source, df, selectedFolder.id);
+      // Process each selected folder
+      for (const folder of selectedFolders) {
+        let targetDestFolderId = 'inbox';
+        if (folder.wellKnownName) {
+          targetDestFolderId = folder.wellKnownName;
+          addLog(`Mapeando origem '${folder.displayName}' para destino padrão: ${targetDestFolderId}`);
+        } else {
+          addLog(`Verificando/Criando pasta "${folder.displayName}" no destino...`);
+          try {
+            targetDestFolderId = await graphService.ensureFolder(destination, folder.displayName, folder.parentWellKnownName);
+          } catch (err) {
+            addLog(`Falha ao criar pasta destino "${folder.displayName}". Usando Inbox.`, 'error');
+          }
+        }
+
+        const folderEmails = await graphService.getEmailsByFilter(source, df, folder.id);
+        const emailsWithMeta = folderEmails.map((e: any) => ({ 
+          ...e, 
+          __actualSourceFolderId: folder.id, 
+          __actualDestFolderId: targetDestFolderId 
+        }));
+        allEmails = allEmails.concat(emailsWithMeta);
+      }
       
-      // If the user wants to include sent items AND they didn't manually select "Sent Items" as the main folder
-      if (includeSentItems && selectedFolder.wellKnownName !== 'sentitems') {
+      // If the user wants to include sent items AND they didn't manually select "Sent Items" as a main folder
+      if (includeSentItems && !hasSentItemsSelected) {
         addLog(`Buscando Itens Enviados adicionais...`);
         try {
           const sentEmails = await graphService.getEmailsByFilter(source, df, 'sentitems');
@@ -199,13 +224,12 @@ export const Dashboard: React.FC = () => {
         try {
           addLog(`Movendo: "${email.subject}"...`);
           
-          let actualDestFolderId = targetDestFolderId;
-          let actualSourceFolderId = selectedFolder.id;
+          let actualSourceFolderId = email.__actualSourceFolderId;
+          let actualDestFolderId = email.__actualDestFolderId;
 
           if (email.__isSentItem) {
             actualSourceFolderId = 'sentitems';
             actualDestFolderId = 'sentitems'; // Default well-known name for Sent Items
-            // Try to map to destination sentitems natively
           }
 
           const newId = await graphService.moveEmailToSharedMailbox(source, email.id, destination, actualDestFolderId);
@@ -247,7 +271,7 @@ export const Dashboard: React.FC = () => {
     setSource(email);
     setShowSourceDropdown(false);
     sourceSearch.setResults([]);
-    setSelectedFolder({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' });
+    setSelectedFolders([{ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' }]);
   };
 
   if (settingsLoading) return null;
@@ -313,30 +337,37 @@ export const Dashboard: React.FC = () => {
           {/* Folder Selection */}
           {source && (
             <div className="form-group" style={{ position: 'relative' }}>
-              <label className="form-label">Pasta a ser migrada</label>
+              <label className="form-label">Pastas a serem migradas (Segure Ctrl ou Command para selecionar várias)</label>
               {loadingFolders ? (
                 <div style={{ fontSize: '0.85rem', color: '#64748b', padding: '0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Loader2 size={14} className="animate-spin" /> Carregando pastas...
                 </div>
               ) : (
                 <select
+                  multiple
+                  size={Math.min(folders.reduce((acc, f) => acc + 1 + (f.children?.length || 0), 1), 8)}
                   className="form-input"
-                  value={selectedFolder?.id || 'inbox'}
+                  value={selectedFolders.map(f => f.id)}
                   onChange={e => {
-                    const id = e.target.value;
-                    let f = folders.find(x => x.id === id);
-                    if (!f) {
-                      for (const parent of folders) {
-                        const child = parent.children?.find((c: any) => c.id === id);
-                        if (child) {
-                          f = { ...child, parentWellKnownName: parent.wellKnownName || 'inbox' };
-                          break;
+                    const ids = Array.from(e.target.selectedOptions, option => option.value);
+                    const selected: any[] = [];
+                    for (const id of ids) {
+                      let f = folders.find(x => x.id === id);
+                      if (!f) {
+                        for (const parent of folders) {
+                          const child = parent.children?.find((c: any) => c.id === id);
+                          if (child) {
+                            f = { ...child, parentWellKnownName: parent.wellKnownName || 'inbox' };
+                            break;
+                          }
                         }
                       }
+                      if (!f && id === 'inbox') f = { id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' };
+                      if (f) selected.push(f);
                     }
-                    if (!f && id === 'inbox') f = { id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' };
-                    setSelectedFolder(f);
+                    setSelectedFolders(selected);
                   }}
+                  style={{ minHeight: '120px' }}
                 >
                   <option value="inbox">Caixa de Entrada (Inbox) — Padrão</option>
                   {folders.map(f => (
@@ -352,7 +383,7 @@ export const Dashboard: React.FC = () => {
             </div>
           )}
 
-          {source && selectedFolder?.wellKnownName !== 'sentitems' && (
+          {source && !selectedFolders.some(f => f.wellKnownName === 'sentitems') && (
             <div className="form-group" style={{ marginTop: '-0.5rem', marginBottom: '1rem' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', color: '#cbd5e1' }}>
                 <input 
