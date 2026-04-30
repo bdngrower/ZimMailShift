@@ -240,7 +240,15 @@ export const Dashboard: React.FC = () => {
     } catch (e: any) {
       addLog(`Erro: ${e.message || 'Falha ao buscar e-mails.'}`, 'error');
       setStatus('error');
-    } finally { setPreviewing(false); }
+    } finally { setPreviewing(false);    }
+  };
+
+  const toggleFolder = (folder: any) => {
+    setSelectedFolders(prev => {
+      const exists = prev.find(f => f.id === folder.id);
+      if (exists) return prev.filter(f => f.id !== folder.id);
+      return [...prev, folder];
+    });
   };
 
   const handleStart = async () => {
@@ -403,48 +411,46 @@ export const Dashboard: React.FC = () => {
           {/* Folder Selection */}
           {source && (
             <div className="form-group" style={{ position: 'relative' }}>
-              <label className="form-label">Pastas a serem migradas (Segure Ctrl ou Command para selecionar várias)</label>
+              <label className="form-label">Selecionar Pastas para Migração</label>
               {loadingFolders ? (
                 <div style={{ fontSize: '0.85rem', color: '#64748b', padding: '0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Loader2 size={14} className="animate-spin" /> Carregando pastas...
                 </div>
               ) : (
-                <select
-                  multiple
-                  size={Math.min(folders.reduce((acc, f) => acc + 1 + (f.children?.length || 0), 1), 8)}
-                  className="form-input"
-                  value={selectedFolders.map(f => f.id)}
-                  onChange={e => {
-                    const ids = Array.from(e.target.selectedOptions, option => option.value);
-                    const selected: any[] = [];
-                    for (const id of ids) {
-                      let f = folders.find(x => x.id === id);
-                      if (!f) {
-                        for (const parent of folders) {
-                          const child = parent.children?.find((c: any) => c.id === id);
-                          if (child) {
-                            f = { ...child, parentWellKnownName: parent.wellKnownName || 'inbox' };
-                            break;
-                          }
-                        }
-                      }
-                      if (!f && id === 'inbox') f = { id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' };
-                      if (f) selected.push(f);
-                    }
-                    setSelectedFolders(selected);
-                  }}
-                  style={{ minHeight: '120px' }}
-                >
-                  <option value="inbox">Caixa de Entrada (Inbox) — Padrão</option>
+                <div className="folder-checkbox-list">
+                  <label className={`folder-checkbox-item${selectedFolders.some(f => f.id === 'inbox') ? ' active' : ''}`}>
+                    <input 
+                      type="checkbox"
+                      checked={selectedFolders.some(f => f.id === 'inbox')}
+                      onChange={() => toggleFolder({ id: 'inbox', displayName: 'Caixa de Entrada', wellKnownName: 'inbox' })}
+                    />
+                    <span>Caixa de Entrada (Inbox) — Padrão</span>
+                  </label>
                   {folders.map(f => (
                     <React.Fragment key={f.id}>
-                      {f.wellKnownName !== 'inbox' && <option value={f.id}>{f.displayName}</option>}
+                      {f.wellKnownName !== 'inbox' && (
+                        <label className={`folder-checkbox-item${selectedFolders.some(x => x.id === f.id) ? ' active' : ''}`}>
+                          <input 
+                            type="checkbox"
+                            checked={selectedFolders.some(x => x.id === f.id)}
+                            onChange={() => toggleFolder(f)}
+                          />
+                          <span>{f.displayName}</span>
+                        </label>
+                      )}
                       {f.children?.map((c: any) => (
-                        <option key={c.id} value={c.id}>&nbsp;&nbsp;&nbsp;↳ {c.displayName}</option>
+                        <label key={c.id} className={`folder-checkbox-item indent${selectedFolders.some(x => x.id === c.id) ? ' active' : ''}`}>
+                          <input 
+                            type="checkbox"
+                            checked={selectedFolders.some(x => x.id === c.id)}
+                            onChange={() => toggleFolder({ ...c, parentWellKnownName: f.wellKnownName || 'inbox' })}
+                          />
+                          <span>↳ {c.displayName}</span>
+                        </label>
                       ))}
                     </React.Fragment>
                   ))}
-                </select>
+                </div>
               )}
             </div>
           )}
