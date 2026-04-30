@@ -55,7 +55,9 @@ export const Dashboard: React.FC = () => {
   const [logs, setLogs] = useState<{ time: string; message: string; type: 'info'|'success'|'error' }[]>([]);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [movedEmails, setMovedEmails] = useState<{ subject: string; newId: string, sourceFolderId: string, destFolderId: string }[]>([]);
-  const [activeMigrationId, setActiveMigrationId] = useState<string | null>(null);
+  const [, setActiveMigrationId] = useState<string | null>(null);
+
+  const { activeProfile, loading: settingsLoading } = useSettings();
 
   // Resume state from Supabase when client changes
   useEffect(() => {
@@ -176,7 +178,6 @@ export const Dashboard: React.FC = () => {
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
   const [showDestDropdown, setShowDestDropdown] = useState(false);
 
-  const { activeProfile, loading: settingsLoading } = useSettings();
 
   const addLog = (message: string, type: 'info'|'success'|'error' = 'info') => {
     setLogs(p => [{ time: new Date().toLocaleTimeString(), message, type }, ...p]);
