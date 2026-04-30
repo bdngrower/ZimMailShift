@@ -55,6 +55,81 @@ export const Dashboard: React.FC = () => {
   const [logs, setLogs] = useState<{ time: string; message: string; type: 'info'|'success'|'error' }[]>([]);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [movedEmails, setMovedEmails] = useState<{ subject: string; newId: string, sourceFolderId: string, destFolderId: string }[]>([]);
+  const [activeMigrationId, setActiveMigrationId] = useState<string | null>(null);
+
+  // Resume state from Supabase when client changes
+  useEffect(() => {
+    if (!activeProfile) {
+      setStatus('idle'); setProgress(0); setLogs([]); setActiveMigrationId(null);
+      return;
+    }
+
+    const loadLastMigration = async () => {
+      // Find the most recent migration for this client
+      const { data: migs } = await supabase
+        .from('zim_migrations')
+        .select('*')
+        .eq('client_name', activeProfile.name)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (migs && migs.length > 0) {
+        const mig = migs[0];
+        setActiveMigrationId(mig.id);
+        setStatus(mig.status as any);
+        setProgress(mig.progress_percent || 0);
+
+        // Fetch existing logs
+        const { data: pastLogs } = await supabase
+          .from('zim_migration_logs')
+          .select('*')
+          .eq('migration_id', mig.id)
+          .order('created_at', { ascending: true });
+
+        if (pastLogs) {
+          setLogs(pastLogs.map(l => ({
+            time: new Date(l.created_at).toLocaleTimeString(),
+            message: l.message,
+            type: l.type as any
+          })));
+        }
+
+        // Only subscribe to realtime if it's active
+        if (mig.status === 'queued' || mig.status === 'running') {
+          setupRealtimeSubscriptions(mig.id);
+        }
+      } else {
+        setStatus('idle'); setProgress(0); setLogs([]); setActiveMigrationId(null);
+      }
+    };
+
+    loadLastMigration();
+
+    return () => {
+      supabase.removeAllChannels(); // Cleanup listeners when switching clients
+    };
+  }, [activeProfile]);
+
+  const setupRealtimeSubscriptions = (migrationId: string) => {
+    supabase.channel(`logs-${migrationId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'zim_migration_logs', filter: `migration_id=eq.${migrationId}` }, payload => {
+        const log = payload.new as any;
+        setLogs(prev => [...prev, { time: new Date(log.created_at).toLocaleTimeString(), message: log.message, type: log.type }]);
+      })
+      .subscribe();
+
+    supabase.channel(`mig-${migrationId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'zim_migrations', filter: `id=eq.${migrationId}` }, payload => {
+        const mig = payload.new as any;
+        if (mig.progress_percent !== undefined) setProgress(mig.progress_percent);
+        if (mig.status === 'completed' || mig.status === 'error') {
+          setStatus(mig.status);
+          setLoading(false);
+        }
+      })
+      .subscribe();
+  };
+
   // Folders
   const [folders, setFolders] = useState<any[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
@@ -229,24 +304,8 @@ export const Dashboard: React.FC = () => {
 
       addLog('Migração iniciada com sucesso em Background! Você pode fechar o navegador.', 'success');
 
-      // Subscribe to Realtime for this migration
-      supabase.channel(`logs-${migrationId}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'zim_migration_logs', filter: `migration_id=eq.${migrationId}` }, payload => {
-          const log = payload.new as any;
-          setLogs(prev => [...prev, { time: new Date(log.created_at).toLocaleTimeString(), message: log.message, type: log.type }]);
-        })
-        .subscribe();
-
-      supabase.channel(`mig-${migrationId}`)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'zim_migrations', filter: `id=eq.${migrationId}` }, payload => {
-          const mig = payload.new as any;
-          if (mig.progress_percent !== undefined) setProgress(mig.progress_percent);
-          if (mig.status === 'completed' || mig.status === 'error') {
-            setStatus(mig.status);
-            setLoading(false);
-          }
-        })
-        .subscribe();
+      setActiveMigrationId(migrationId);
+      setupRealtimeSubscriptions(migrationId);
 
     } catch (e: any) {
       setStatus('error'); addLog(`Erro ao acionar background: ${e.message}`, 'error');
