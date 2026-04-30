@@ -5,6 +5,7 @@ import { graphService } from '../services/graphService';
 import type { DateFilterMode } from '../services/graphService';
 import { useSettings } from '../hooks/useSettings';
 import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 // No longer requires msalAccount as a prop
 // Autocomplete hook for email search
@@ -170,82 +171,87 @@ export const Dashboard: React.FC = () => {
     if (!source) { addLog('Defina a Caixa de Origem.', 'error'); return; }
     if (!destination) { addLog('Por favor, preencha a Caixa Compartilhada de Destino antes de iniciar!', 'error'); return; }
     if (selectedFolders.length === 0 && !includeSentItems) { addLog('Selecione pelo menos uma pasta para migrar.', 'error'); return; }
+    if (!activeProfile) { addLog('Selecione um cliente nas configurações.', 'error'); return; }
 
     setLoading(true); setStatus('running'); setProgress(0); setLogs([]); setMovedEmails([]);
-    const df = getDateFilter();
-    addLog(`Iniciando migração de ${source} para ${destination}...`);
+    addLog(`Enviando ordem de migração para o Servidor Background...`);
+
     try {
-      let allEmails: any[] = [];
-      const hasSentItemsSelected = selectedFolders.some(f => f.wellKnownName === 'sentitems');
+      const configObj = {
+        selectedFolders,
+        includeSentItems,
+        filterMode,
+        filterDate,
+        filterYear,
+        filterMonth,
+        filterMonthYear
+      };
 
-      // Process each selected folder
-      for (const folder of selectedFolders) {
-        let targetDestFolderId = 'inbox';
-        if (folder.wellKnownName) {
-          targetDestFolderId = folder.wellKnownName;
-          addLog(`Mapeando origem '${folder.displayName}' para destino padrão: ${targetDestFolderId}`);
-        } else {
-          addLog(`Verificando/Criando pasta "${folder.displayName}" no destino...`);
-          try {
-            targetDestFolderId = await graphService.ensureFolder(destination, folder.displayName, folder.parentWellKnownName);
-          } catch (err) {
-            addLog(`Falha ao criar pasta destino "${folder.displayName}". Usando Inbox.`, 'error');
+      // Create Migration Record
+      const { data: migration, error } = await supabase
+        .from('zim_migrations')
+        .insert([{
+          client_name: activeProfile.name,
+          source_email: source,
+          dest_email: destination,
+          status: 'queued',
+          progress_percent: 0,
+          current_folder: ''
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      const migrationId = migration.id;
+
+      addLog(`Registro criado (ID: ${migrationId}). Acionando GitHub Actions...`);
+
+      // Trigger the backend
+      const { tenantId, clientId, clientSecret } = activeProfile;
+      const res = await fetch('/api/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          migration_id: migrationId,
+          tenant_id: tenantId,
+          client_id: clientId,
+          client_secret: clientSecret,
+          source_email: source,
+          dest_email: destination,
+          config: configObj
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Falha ao acionar a API de Trigger');
+      }
+
+      addLog('Migração iniciada com sucesso em Background! Você pode fechar o navegador.', 'success');
+
+      // Subscribe to Realtime for this migration
+      supabase.channel(`logs-${migrationId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'zim_migration_logs', filter: `migration_id=eq.${migrationId}` }, payload => {
+          const log = payload.new as any;
+          setLogs(prev => [...prev, { time: new Date(log.created_at).toLocaleTimeString(), message: log.message, type: log.type }]);
+        })
+        .subscribe();
+
+      supabase.channel(`mig-${migrationId}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'zim_migrations', filter: `id=eq.${migrationId}` }, payload => {
+          const mig = payload.new as any;
+          if (mig.progress_percent !== undefined) setProgress(mig.progress_percent);
+          if (mig.status === 'completed' || mig.status === 'error') {
+            setStatus(mig.status);
+            setLoading(false);
           }
-        }
+        })
+        .subscribe();
 
-        const folderEmails = await graphService.getEmailsByFilter(source, df, folder.id);
-        const emailsWithMeta = folderEmails.map((e: any) => ({ 
-          ...e, 
-          __actualSourceFolderId: folder.id, 
-          __actualDestFolderId: targetDestFolderId 
-        }));
-        allEmails = allEmails.concat(emailsWithMeta);
-      }
-      
-      // If the user wants to include sent items AND they didn't manually select "Sent Items" as a main folder
-      if (includeSentItems && !hasSentItemsSelected) {
-        addLog(`Buscando Itens Enviados adicionais...`);
-        try {
-          const sentEmails = await graphService.getEmailsByFilter(source, df, 'sentitems');
-          // Add a property so we know they belong to sent items
-          const sentWithMeta = sentEmails.map((e: any) => ({ ...e, __isSentItem: true }));
-          allEmails = allEmails.concat(sentWithMeta);
-        } catch (err: any) {
-          addLog(`Aviso: não foi possível buscar Itens Enviados: ${err.message}`, 'error');
-        }
-      }
-
-      if (!allEmails?.length) { addLog('Nenhum e-mail encontrado.', 'info'); setStatus('completed'); setLoading(false); return; }
-      addLog(`Encontrados ${allEmails.length} e-mails. Movimentação em andamento...`, 'success');
-      let count = 0;
-      const moved: { subject: string; newId: string, sourceFolderId: string, destFolderId: string }[] = [];
-      
-      for (const email of allEmails) {
-        try {
-          addLog(`Movendo: "${email.subject}"...`);
-          
-          let actualSourceFolderId = email.__actualSourceFolderId;
-          let actualDestFolderId = email.__actualDestFolderId;
-
-          if (email.__isSentItem) {
-            actualSourceFolderId = 'sentitems';
-            actualDestFolderId = 'sentitems'; // Default well-known name for Sent Items
-          }
-
-          const newId = await graphService.moveEmailToSharedMailbox(source, email.id, destination, actualDestFolderId);
-          moved.push({ subject: email.subject, newId, sourceFolderId: actualSourceFolderId, destFolderId: actualDestFolderId });
-          count++;
-          setProgress(Math.round((count / allEmails.length) * 100));
-          addLog(`Movido: ${email.subject}`, 'success');
-        } catch (err: any) {
-          addLog(`Falha: ${email.subject} — ${err.message || ''}`, 'error');
-        }
-      }
-      setMovedEmails(moved); setStatus('completed');
-      addLog(`Concluído! ${count} de ${allEmails.length} e-mails movidos.`, 'success');
     } catch (e: any) {
-      setStatus('error'); addLog(`Erro: ${e.message || 'Falha na migração.'}`, 'error');
-    } finally { setLoading(false); }
+      setStatus('error'); addLog(`Erro ao acionar background: ${e.message}`, 'error');
+      setLoading(false);
+    }
   };
 
   const handleRollback = async () => {
