@@ -79,8 +79,14 @@ export const Dashboard: React.FC = () => {
       setLoadingFolders(true);
       try {
         const f = await graphService.getFolders(source);
-        setFolders(f);
-      } catch {
+        if (!f || f.length === 0) {
+          addLog(`Aviso: Nenhuma pasta retornada da Graph API para ${source}.`, 'error');
+        } else {
+          addLog(`Pastas carregadas com sucesso (${f.length} pastas raízes).`, 'success');
+        }
+        setFolders(f || []);
+      } catch (err: any) {
+        addLog(`Erro ao buscar pastas: ${err.message}`, 'error');
         setFolders([]);
       }
       setLoadingFolders(false);

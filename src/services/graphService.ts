@@ -69,7 +69,7 @@ export class GraphService {
       return await this.callProxy('get_folders', { userEmail });
     } catch (error: any) {
       console.error("Erro ao buscar pastas:", error);
-      return [];
+      throw error;
     }
   }
 

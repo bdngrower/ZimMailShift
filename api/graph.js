@@ -123,9 +123,10 @@ export default async function handler(req, res) {
         // Fetch 1 level of child folders for ALL folders (bypassing potential childFolderCount cache issues)
         for (const f of folders) {
           try {
-            const childRes = await graphRequest(token, `/users/${encodeURIComponent(userEmail)}/mailFolders/${f.id}/childFolders?$top=250&includeHiddenFolders=true`);
+            const childRes = await graphRequest(token, `/users/${encodeURIComponent(userEmail)}/mailFolders/${f.id}/childFolders?$top=250`);
             f.children = childRes.value || [];
           } catch(e) {
+            console.error(`Error fetching child folders for ${f.id} (${f.displayName}):`, e);
             f.children = [];
           }
         }
